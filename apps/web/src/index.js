@@ -84,63 +84,79 @@ async function runManualSync() {
       const wait = Math.max(0, ETHERSCAN_MIN_INTERVAL_MS - (now - lastCallAt));
       if (wait > 0) await sleep(wait);
 
-      let response;
-      for (let attempt = 1; attempt <= 5; attempt += 1) {
-        try {
-          response = await client.fetchErc20Transfers(wallet.address, 1, 200);
-          if (attempt > 1) pushSyncLog(`Recovered after retry for ${wallet.address} (attempt ${attempt})`, 'warn');
-          break;
-        } catch (e) {
-          const msg = String(e?.message || e).toLowerCase();
-          const rateLimited = msg.includes('rate limit') || msg.includes('max calls per sec');
-          if (!rateLimited || attempt === 5) throw e;
-          pushSyncLog(`Rate limited on ${wallet.address}, retry ${attempt}/5`, 'warn');
-          await sleep(attempt * 500);
+      const PAGE_SIZE = 100;
+      let page = 1;
+      let walletEvents = 0;
+      while (true) {
+        let response;
+        for (let attempt = 1; attempt <= 5; attempt += 1) {
+          try {
+            response = await client.fetchErc20Transfers(wallet.address, page, PAGE_SIZE);
+            if (attempt > 1) pushSyncLog(`Recovered after retry for ${wallet.address} page=${page} (attempt ${attempt})`, 'warn');
+            break;
+          } catch (e) {
+            const msg = String(e?.message || e).toLowerCase();
+            const rateLimited = msg.includes('rate limit') || msg.includes('max calls per sec');
+            if (!rateLimited || attempt === 5) throw e;
+            pushSyncLog(`Rate limited on ${wallet.address} page=${page}, retry ${attempt}/5`, 'warn');
+            await sleep(attempt * 500);
+          }
         }
-      }
-      lastCallAt = Date.now();
-      const result = Array.isArray(response?.result) ? response.result : [];
 
-      for (const tx of result) {
-        const contract = normalizeAddress(tx.contractAddress);
-        const wl = whitelistMap.get(contract);
-        if (!wl) continue;
+        lastCallAt = Date.now();
+        const result = Array.isArray(response?.result) ? response.result : [];
+        if (!result.length) break;
 
-        const confirmations = Number(tx.confirmations || 0);
-        if (!Number.isFinite(confirmations) || confirmations <= 0) continue;
+        for (const tx of result) {
+          const contract = normalizeAddress(tx.contractAddress);
+          const wl = whitelistMap.get(contract);
+          if (!wl) continue;
 
-        const from = normalizeAddress(tx.from);
-        const to = normalizeAddress(tx.to);
-        const walletAddr = normalizeAddress(wallet.address);
-        const direction = to === walletAddr ? 'incoming' : from === walletAddr ? 'outgoing' : null;
-        if (!direction) continue;
+          const confirmations = Number(tx.confirmations || 0);
+          if (!Number.isFinite(confirmations) || confirmations <= 0) continue;
 
-        try {
-          await prisma.erc20Transfer.create({
-            data: {
-              walletId: wallet.id,
-              chain: 'ethereum',
-              txHash: String(tx.hash),
-              logIndex: Number(tx.logIndex || 0),
-              blockNumber: BigInt(tx.blockNumber || 0),
-              blockTimestamp: new Date(Number(tx.timeStamp || 0) * 1000),
-              direction,
-              tokenContract: String(tx.contractAddress),
-              tokenName: wl.tokenName,
-              tokenSymbol: tx.tokenSymbol ? String(tx.tokenSymbol) : null,
-              tokenDecimals: tx.tokenDecimal ? Number(tx.tokenDecimal) : null,
-              amountRaw: String(tx.value || '0'),
-              amountNormalized: normalizeAmount(tx.value, tx.tokenDecimal),
-              fromAddress: String(tx.from || ''),
-              toAddress: String(tx.to || ''),
-              confirmations,
-              isConfirmed: true,
-            },
-          });
-          syncState.inserted += 1;
-        } catch (e) {
-          if (!String(e?.message || e).includes('Unique constraint')) throw e;
+          const from = normalizeAddress(tx.from);
+          const to = normalizeAddress(tx.to);
+          const walletAddr = normalizeAddress(wallet.address);
+          const direction = to === walletAddr ? 'incoming' : from === walletAddr ? 'outgoing' : null;
+          if (!direction) continue;
+
+          walletEvents += 1;
+          try {
+            await prisma.erc20Transfer.create({
+              data: {
+                walletId: wallet.id,
+                chain: 'ethereum',
+                txHash: String(tx.hash),
+                logIndex: Number(tx.logIndex || 0),
+                blockNumber: BigInt(tx.blockNumber || 0),
+                blockTimestamp: new Date(Number(tx.timeStamp || 0) * 1000),
+                direction,
+                tokenContract: String(tx.contractAddress),
+                tokenName: wl.tokenName,
+                tokenSymbol: tx.tokenSymbol ? String(tx.tokenSymbol) : null,
+                tokenDecimals: tx.tokenDecimal ? Number(tx.tokenDecimal) : null,
+                amountRaw: String(tx.value || '0'),
+                amountNormalized: normalizeAmount(tx.value, tx.tokenDecimal),
+                fromAddress: String(tx.from || ''),
+                toAddress: String(tx.to || ''),
+                confirmations,
+                isConfirmed: true,
+              },
+            });
+            syncState.inserted += 1;
+          } catch (e) {
+            if (!String(e?.message || e).includes('Unique constraint')) throw e;
+          }
         }
+
+        pushSyncLog(`Wallet ${wallet.address}: scanned page ${page}, events so far ${walletEvents}`);
+        if (result.length < PAGE_SIZE) break;
+        page += 1;
+
+        const now2 = Date.now();
+        const wait2 = Math.max(0, ETHERSCAN_MIN_INTERVAL_MS - (now2 - lastCallAt));
+        if (wait2 > 0) await sleep(wait2);
       }
 
       await prisma.walletSyncState.upsert({
