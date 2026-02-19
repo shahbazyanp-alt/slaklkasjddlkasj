@@ -306,6 +306,13 @@ async function loadTransfers() {
 }
 
 function renderTransfers(){
+  const totalIncoming = state.transfers
+    .filter((t) => t.direction === 'incoming')
+    .reduce((s, t) => s + Number(t.amountNormalized || 0), 0);
+  const totalOutgoing = state.transfers
+    .filter((t) => t.direction === 'outgoing')
+    .reduce((s, t) => s + Number(t.amountNormalized || 0), 0);
+
   document.getElementById('view-transfers').innerHTML = `
     <div class="card"><h2>Транзакции</h2><div class="muted">Реальные данные из БД</div></div>
     <div class="card"><div class="row">
@@ -323,8 +330,11 @@ function renderTransfers(){
     </div>
     <div style="margin-top:10px" class="sync-log" id="t-sync-log"></div>
     </div>
-    <div class="card"><table><thead><tr><th>Дата</th><th>Кошелёк</th><th>Токен</th><th>Напр.</th><th>Сумма</th><th>TX</th></tr></thead>
-      <tbody>${state.transfers.map(t=>`<tr><td>${new Date(t.blockTimestamp).toLocaleString('ru-RU')}</td><td>${t.wallet?.address || ''}</td><td>${t.tokenName}</td><td><span class="pill ${t.direction==='incoming'?'in':'out'}">${t.direction}</span></td><td>${fmt(t.amountNormalized)}</td><td><a href="https://etherscan.io/tx/${t.txHash}" target="_blank" rel="noopener noreferrer">${t.txHash.slice(0,12)}...</a></td></tr>`).join('')}</tbody></table></div>`;
+    <div class="card"><table>
+      <thead><tr><th>Дата</th><th>Кошелёк</th><th>Токен</th><th>Напр.</th><th>Приход</th><th>Расход</th><th>TX</th></tr></thead>
+      <tbody>${state.transfers.map(t=>`<tr><td>${new Date(t.blockTimestamp).toLocaleString('ru-RU')}</td><td>${t.wallet?.address || ''}</td><td>${t.tokenName}</td><td><span class="pill ${t.direction==='incoming'?'in':'out'}">${t.direction}</span></td><td class="in">${t.direction==='incoming' ? fmt(t.amountNormalized) : ''}</td><td class="out">${t.direction==='outgoing' ? fmt(t.amountNormalized) : ''}</td><td><a href="https://etherscan.io/tx/${t.txHash}" target="_blank" rel="noopener noreferrer">${t.txHash.slice(0,12)}...</a></td></tr>`).join('')}</tbody>
+      <tfoot><tr><th colspan="4">Итого</th><th class="in">${fmt(totalIncoming)}</th><th class="out">${fmt(totalOutgoing)}</th><th></th></tr></tfoot>
+    </table></div>`;
 
   const tStart = document.getElementById('t-start');
   const tEnd = document.getElementById('t-end');
