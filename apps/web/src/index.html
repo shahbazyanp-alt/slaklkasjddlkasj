@@ -268,7 +268,7 @@ function renderTransfers(){
       <span id="t-sync-note" class="note"></span>
     </div></div>
     <div class="card"><table><thead><tr><th>Дата</th><th>Кошелёк</th><th>Токен</th><th>Напр.</th><th>Сумма</th><th>TX</th></tr></thead>
-      <tbody>${state.transfers.map(t=>`<tr><td>${new Date(t.blockTimestamp).toLocaleString('ru-RU')}</td><td>${t.wallet?.address || ''}</td><td>${t.tokenName}</td><td><span class="pill ${t.direction==='incoming'?'in':'out'}">${t.direction}</span></td><td>${fmt(t.amountNormalized)}</td><td>${t.txHash.slice(0,12)}...</td></tr>`).join('')}</tbody></table></div>`;
+      <tbody>${state.transfers.map(t=>`<tr><td>${new Date(t.blockTimestamp).toLocaleString('ru-RU')}</td><td>${t.wallet?.address || ''}</td><td>${t.tokenName}</td><td><span class="pill ${t.direction==='incoming'?'in':'out'}">${t.direction}</span></td><td>${fmt(t.amountNormalized)}</td><td><a href="https://etherscan.io/tx/${t.txHash}" target="_blank" rel="noopener noreferrer">${t.txHash.slice(0,12)}...</a></td></tr>`).join('')}</tbody></table></div>`;
 
   document.getElementById('t-apply').onclick = loadTransfers;
   document.getElementById('t-refresh').onclick = async () => { await refreshAll(); await loadTransfers(); };
