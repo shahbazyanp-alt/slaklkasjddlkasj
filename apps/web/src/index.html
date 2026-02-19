@@ -63,8 +63,7 @@ const state = {
   whitelist: [],
   transfers: [],
   summaryMode: 'token',
-  transferFilters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '' },
-  summaryFilters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '' },
+  filters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '' },
 };
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 6 });
@@ -102,16 +101,23 @@ async function startSyncWithProgress(noteEl, fillEl) {
   return finalStatus;
 }
 
-function setTab(tab){
+async function setTab(tab){
   document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));
   document.getElementById('view-'+tab).classList.remove('hidden');
   document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+
+  if (tab === 'transfers') {
+    await loadTransfers();
+  }
+  if (tab === 'summary') {
+    await loadSummary();
+  }
 }
 
 function renderNav(){
   const nav = document.getElementById('nav');
   nav.innerHTML = tabs.map(([id,label])=>'<button data-tab="'+id+'">'+label+'</button>').join('');
-  nav.querySelectorAll('button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+  nav.querySelectorAll('button').forEach(b=>b.onclick=()=>{ setTab(b.dataset.tab); });
 }
 
 function walletOptionsDatalist(id) {
@@ -243,7 +249,7 @@ function buildQueryFromFilters(filters) {
 }
 
 async function loadTransfers() {
-  const q = buildQueryFromFilters(state.transferFilters);
+  const q = buildQueryFromFilters(state.filters);
   state.transfers = await api('/api/transfers' + (q ? '?' + q : ''));
   renderTransfers();
   renderOverview();
@@ -253,10 +259,10 @@ function renderTransfers(){
   document.getElementById('view-transfers').innerHTML = `
     <div class="card"><h2>Транзакции</h2><div class="muted">Реальные данные из БД</div></div>
     <div class="card"><div class="row">
-      <input id="t-start" type="date" value="${state.transferFilters.start}" /><input id="t-end" type="date" value="${state.transferFilters.end}" />
-      <select id="t-direction"><option value="" ${state.transferFilters.direction === '' ? 'selected' : ''}>Все направления</option><option value="incoming" ${state.transferFilters.direction === 'incoming' ? 'selected' : ''}>Incoming</option><option value="outgoing" ${state.transferFilters.direction === 'outgoing' ? 'selected' : ''}>Outgoing</option></select>
-      <select id="t-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.transferFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
-      <input id="t-wallet" list="wallet-options-transfers" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" value="${state.transferFilters.walletAddress}" />
+      <input id="t-start" type="date" value="${state.filters.start}" /><input id="t-end" type="date" value="${state.filters.end}" />
+      <select id="t-direction"><option value="" ${state.filters.direction === '' ? 'selected' : ''}>Все направления</option><option value="incoming" ${state.filters.direction === 'incoming' ? 'selected' : ''}>Incoming</option><option value="outgoing" ${state.filters.direction === 'outgoing' ? 'selected' : ''}>Outgoing</option></select>
+      <select id="t-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.filters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
+      <input id="t-wallet" list="wallet-options-transfers" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" value="${state.filters.walletAddress}" />
       ${walletOptionsDatalist('wallet-options-transfers')}
       <button id="t-apply">Применить</button>
       <button id="t-refresh">Обновить</button>
@@ -274,11 +280,11 @@ function renderTransfers(){
   const tWallet = document.getElementById('t-wallet');
 
   const syncTransferFiltersFromUi = () => {
-    state.transferFilters.start = tStart.value || '';
-    state.transferFilters.end = tEnd.value || '';
-    state.transferFilters.direction = tDirection.value || '';
-    state.transferFilters.tokenContract = tToken.value || '';
-    state.transferFilters.walletAddress = tWallet.value || '';
+    state.filters.start = tStart.value || '';
+    state.filters.end = tEnd.value || '';
+    state.filters.direction = tDirection.value || '';
+    state.filters.tokenContract = tToken.value || '';
+    state.filters.walletAddress = tWallet.value || '';
   };
 
   [tStart, tEnd, tDirection, tToken, tWallet].forEach((el) => {
@@ -309,7 +315,7 @@ function renderTransfers(){
 }
 
 async function loadSummary() {
-  const q = buildQueryFromFilters(state.summaryFilters);
+  const q = buildQueryFromFilters(state.filters);
   const data = await api(`/api/summary?mode=${state.summaryMode}` + (q ? '&' + q : ''));
   renderSummary(data);
 }
@@ -318,10 +324,10 @@ function renderSummary(summaryRows = []){
   document.getElementById('view-summary').innerHTML = `
     <div class="card"><h2>Сводка</h2><div class="muted">Итоги по токенам или кошелькам</div></div>
     <div class="card"><div class="row">
-      <input id="s-start" type="date" value="${state.summaryFilters.start}" /><input id="s-end" type="date" value="${state.summaryFilters.end}" />
-      <select id="s-direction"><option value="" ${state.summaryFilters.direction === '' ? 'selected' : ''}>Все направления</option><option value="incoming" ${state.summaryFilters.direction === 'incoming' ? 'selected' : ''}>Incoming</option><option value="outgoing" ${state.summaryFilters.direction === 'outgoing' ? 'selected' : ''}>Outgoing</option></select>
-      <select id="s-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.summaryFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
-      <input id="s-wallet" list="wallet-options-summary" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" value="${state.summaryFilters.walletAddress}" />
+      <input id="s-start" type="date" value="${state.filters.start}" /><input id="s-end" type="date" value="${state.filters.end}" />
+      <select id="s-direction"><option value="" ${state.filters.direction === '' ? 'selected' : ''}>Все направления</option><option value="incoming" ${state.filters.direction === 'incoming' ? 'selected' : ''}>Incoming</option><option value="outgoing" ${state.filters.direction === 'outgoing' ? 'selected' : ''}>Outgoing</option></select>
+      <select id="s-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.filters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
+      <input id="s-wallet" list="wallet-options-summary" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" value="${state.filters.walletAddress}" />
       ${walletOptionsDatalist('wallet-options-summary')}
       <button id="s-apply">Применить</button>
       <button id="s-refresh">Обновить</button>
@@ -338,11 +344,11 @@ function renderSummary(summaryRows = []){
   const sWallet = document.getElementById('s-wallet');
 
   const syncSummaryFiltersFromUi = () => {
-    state.summaryFilters.start = sStart.value || '';
-    state.summaryFilters.end = sEnd.value || '';
-    state.summaryFilters.direction = sDirection.value || '';
-    state.summaryFilters.tokenContract = sToken.value || '';
-    state.summaryFilters.walletAddress = sWallet.value || '';
+    state.filters.start = sStart.value || '';
+    state.filters.end = sEnd.value || '';
+    state.filters.direction = sDirection.value || '';
+    state.filters.tokenContract = sToken.value || '';
+    state.filters.walletAddress = sWallet.value || '';
   };
 
   [sStart, sEnd, sDirection, sToken, sWallet].forEach((el) => {
@@ -381,7 +387,7 @@ async function refreshAll() {
   renderTransfers();
   await loadSummary();
   renderSettings();
-  setTab('overview');
+  await setTab('overview');
 })();
 </script>
 </body>
