@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Tracker MVP Draft</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#121a30; --muted:#8ea0c0; --text:#e9efff; --accent:#5aa9ff; --ok:#3ddc97; --danger:#ff6b6b; }
+    * { box-sizing: border-box; font-family: Inter, system-ui, sans-serif; }
+    body { margin:0; background:var(--bg); color:var(--text); }
+    .app { display:grid; grid-template-columns: 240px 1fr; min-height:100vh; }
+    .sidebar { padding:18px; border-right:1px solid #233052; background:#0e1528; }
+    .brand { font-weight:700; margin-bottom:18px; }
+    .nav button { width:100%; text-align:left; background:transparent; color:var(--text); border:0; padding:10px 12px; border-radius:10px; cursor:pointer; }
+    .nav button.active, .nav button:hover { background:#1a2646; }
+    .main { padding:20px; }
+    .card { background:var(--panel); border:1px solid #233052; border-radius:14px; padding:14px; margin-bottom:14px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    input, select, button { border-radius:10px; border:1px solid #2a3a64; background:#0f1730; color:var(--text); padding:8px 10px; }
+    button.primary { background:var(--accent); color:#04122b; border-color:transparent; font-weight:700; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { border-bottom:1px solid #233052; padding:10px 8px; text-align:left; }
+    th { color:var(--muted); font-weight:600; }
+    .muted { color:var(--muted); }
+    .pill { padding:4px 8px; border-radius:999px; font-size:12px; border:1px solid #355084; }
+    .in { color:var(--ok); }
+    .out { color:var(--danger); }
+    .grid2 { display:grid; grid-template-columns:repeat(2,minmax(220px,1fr)); gap:10px; }
+    .hidden { display:none; }
+    .kpi { font-size:22px; font-weight:700; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">⚔️ Crypto Tracker (MVP Draft)</div>
+      <div class="muted" style="margin-bottom:12px">Ethereum • ERC-20 • Confirmed only</div>
+      <nav class="nav" id="nav"></nav>
+    </aside>
+    <main class="main">
+      <section id="view-overview" class="view"></section>
+      <section id="view-wallets" class="view hidden"></section>
+      <section id="view-whitelist" class="view hidden"></section>
+      <section id="view-transfers" class="view hidden"></section>
+      <section id="view-summary" class="view hidden"></section>
+      <section id="view-settings" class="view hidden"></section>
+    </main>
+  </div>
+
+<script>
+const tabs = [
+  ['overview','Обзор'],
+  ['wallets','Кошельки'],
+  ['whitelist','Whitelist'],
+  ['transfers','Транзакции'],
+  ['summary','Сводка'],
+  ['settings','Настройки']
+];
+
+const mockTransfers = [
+  {date:'2026-02-18 13:11', wallet:'0xAa...11', token:'USDT', dir:'incoming', amount:'1250.00', tx:'0xabc...111'},
+  {date:'2026-02-18 15:42', wallet:'0xBb...22', token:'USDC', dir:'outgoing', amount:'500.00', tx:'0xdef...222'},
+  {date:'2026-02-19 09:01', wallet:'0xAa...11', token:'USDT', dir:'incoming', amount:'200.00', tx:'0xghi...333'},
+];
+
+const wallets = [
+  {address:'0xAa...11', label:'Main wallet', tags:['client-a','hot']},
+  {address:'0xBb...22', label:'Reserve', tags:['reserve']}
+];
+
+const whitelist = [
+  {token:'USDT', contract:'0xdAC17F958D2ee523a2206206994597C13D831ec7'},
+  {token:'USDC', contract:'0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'}
+];
+
+function setTab(tab){
+  document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));
+  document.getElementById('view-'+tab).classList.remove('hidden');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
+}
+
+function renderNav(){
+  const nav = document.getElementById('nav');
+  nav.innerHTML = tabs.map(([id,label])=>'<button data-tab="'+id+'">'+label+'</button>').join('');
+  nav.querySelectorAll('button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
+}
+
+function renderOverview(){
+  const incoming = mockTransfers.filter(t=>t.dir==='incoming').reduce((s,t)=>s+Number(t.amount),0);
+  const outgoing = mockTransfers.filter(t=>t.dir==='outgoing').reduce((s,t)=>s+Number(t.amount),0);
+  document.getElementById('view-overview').innerHTML = `
+    <div class="card"><h2>Обзор</h2><div class="muted">Черновой экран MVP</div></div>
+    <div class="grid2">
+      <div class="card"><div class="muted">Кошельков</div><div class="kpi">${wallets.length}</div></div>
+      <div class="card"><div class="muted">Whitelist токенов</div><div class="kpi">${whitelist.length}</div></div>
+      <div class="card"><div class="muted">Входящие (USDT/USDC demo)</div><div class="kpi in">${incoming}</div></div>
+      <div class="card"><div class="muted">Исходящие (USDT/USDC demo)</div><div class="kpi out">${outgoing}</div></div>
+    </div>`;
+}
+
+function renderWallets(){
+  document.getElementById('view-wallets').innerHTML = `
+    <div class="card"><h2>Кошельки</h2><div class="muted">Добавление вручную (copy/paste) + теги</div></div>
+    <div class="card">
+      <div class="row">
+        <input placeholder="0x... address" style="min-width:280px" />
+        <input placeholder="Label" />
+        <input placeholder="tags через запятую" style="min-width:220px" />
+        <button class="primary">Добавить</button>
+      </div>
+    </div>
+    <div class="card">
+      <table><thead><tr><th>Address</th><th>Label</th><th>Tags</th><th></th></tr></thead>
+      <tbody>${wallets.map(w=>`<tr><td>${w.address}</td><td>${w.label}</td><td>${w.tags.join(', ')}</td><td><button>Удалить</button></td></tr>`).join('')}</tbody></table>
+    </div>`;
+}
+
+function renderWhitelist(){
+  document.getElementById('view-whitelist').innerHTML = `
+    <div class="card"><h2>Whitelist контрактов</h2><div class="muted">Только эти ERC-20 учитываются в отчётах</div></div>
+    <div class="card"><div class="row">
+      <input placeholder="Token name (USDT)" />
+      <input placeholder="Contract address 0x..." style="min-width:360px" />
+      <button class="primary">Добавить</button>
+    </div></div>
+    <div class="card"><table><thead><tr><th>Token</th><th>Contract</th><th></th></tr></thead>
+      <tbody>${whitelist.map(t=>`<tr><td>${t.token}</td><td>${t.contract}</td><td><button>Удалить</button></td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function renderTransfers(){
+  document.getElementById('view-transfers').innerHTML = `
+    <div class="card"><h2>Транзакции</h2><div class="muted">Фильтры: дата, вход/выход, токен, кошелёк</div></div>
+    <div class="card"><div class="row">
+      <input type="date" /><input type="date" />
+      <select><option>Все направления</option><option>Incoming</option><option>Outgoing</option></select>
+      <select><option>Все токены</option><option>USDT</option><option>USDC</option></select>
+      <select><option>Все кошельки</option><option>0xAa...11</option><option>0xBb...22</option></select>
+      <button>Применить</button>
+      <button>Обновить</button>
+      <button class="primary">Экспорт CSV</button>
+      <button class="primary">Экспорт XLSX</button>
+    </div></div>
+    <div class="card"><table><thead><tr><th>Дата</th><th>Кошелёк</th><th>Токен</th><th>Напр.</th><th>Сумма</th><th>TX</th></tr></thead>
+      <tbody>${mockTransfers.map(t=>`<tr><td>${t.date}</td><td>${t.wallet}</td><td>${t.token}</td><td><span class="pill ${t.dir==='incoming'?'in':'out'}">${t.dir}</span></td><td>${t.amount}</td><td>${t.tx}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+function renderSummary(){
+  document.getElementById('view-summary').innerHTML = `
+    <div class="card"><h2>Сводка</h2><div class="muted">Итоги по токенам и по кошелькам</div></div>
+    <div class="grid2">
+      <div class="card"><h3>По токенам</h3>
+        <table><thead><tr><th>Токен</th><th>Вход</th><th>Выход</th></tr></thead>
+        <tbody><tr><td>USDT</td><td class="in">1450.00</td><td class="out">0.00</td></tr><tr><td>USDC</td><td class="in">0.00</td><td class="out">500.00</td></tr></tbody></table>
+      </div>
+      <div class="card"><h3>По кошелькам</h3>
+        <table><thead><tr><th>Кошелёк</th><th>Вход</th><th>Выход</th></tr></thead>
+        <tbody><tr><td>0xAa...11</td><td class="in">1450.00</td><td class="out">0.00</td></tr><tr><td>0xBb...22</td><td class="in">0.00</td><td class="out">500.00</td></tr></tbody></table>
+      </div>
+    </div>`;
+}
+
+function renderSettings(){
+  document.getElementById('view-settings').innerHTML = `
+    <div class="card"><h2>Настройки</h2><div class="muted">Автообновление + роли</div></div>
+    <div class="card"><div class="row">
+      <label>Auto-refresh interval:</label>
+      <select><option>1 minute</option><option>1 hour</option><option>1 day</option></select>
+      <button class="primary">Сохранить</button>
+    </div></div>
+    <div class="card"><h3>Роли доступа</h3>
+      <ul><li><b>admin</b> — полный доступ</li><li><b>read_only</b> — только просмотр</li></ul>
+    </div>`;
+}
+
+renderNav();
+renderOverview();
+renderWallets();
+renderWhitelist();
+renderTransfers();
+renderSummary();
+renderSettings();
+setTab('overview');
+</script>
+</body>
+</html>
