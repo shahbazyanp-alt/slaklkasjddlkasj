@@ -299,10 +299,12 @@ async function handleApi(req, res) {
     const tokenContract = url.searchParams.get('tokenContract');
     const walletAddress = url.searchParams.get('walletAddress');
     const walletTag = url.searchParams.get('walletTag');
+    const includeSpam = url.searchParams.get('includeSpam') === '1';
 
     const items = await prisma.erc20Transfer.findMany({
       where: {
         isConfirmed: true,
+        ...(includeSpam ? {} : { amountRaw: { not: '0' } }),
         direction: direction === 'incoming' || direction === 'outgoing' ? direction : undefined,
         tokenContract: tokenContract || undefined,
         wallet: {
@@ -346,10 +348,12 @@ async function handleApi(req, res) {
     const tokenContract = url.searchParams.get('tokenContract');
     const walletAddress = url.searchParams.get('walletAddress');
     const walletTag = url.searchParams.get('walletTag');
+    const includeSpam = url.searchParams.get('includeSpam') === '1';
 
     const transfers = await prisma.erc20Transfer.findMany({
       where: {
         isConfirmed: true,
+        ...(includeSpam ? {} : { amountRaw: { not: '0' } }),
         direction: direction === 'incoming' || direction === 'outgoing' ? direction : undefined,
         tokenContract: tokenContract || undefined,
         wallet: {

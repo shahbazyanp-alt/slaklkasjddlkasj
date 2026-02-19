@@ -68,7 +68,7 @@ const state = {
   transfers: [],
   tags: [],
   summaryMode: 'token',
-  filters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '', walletTag: '' },
+  filters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '', walletTag: '', includeSpam: false },
 };
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 6 });
@@ -295,6 +295,7 @@ function buildQueryFromFilters(filters) {
   if (filters.tokenContract) q.set('tokenContract', filters.tokenContract);
   if (filters.walletAddress) q.set('walletAddress', filters.walletAddress);
   if (filters.walletTag) q.set('walletTag', filters.walletTag);
+  if (filters.includeSpam) q.set('includeSpam', '1');
   return q.toString();
 }
 
@@ -314,12 +315,13 @@ function renderTransfers(){
     .reduce((s, t) => s + Number(t.amountNormalized || 0), 0);
 
   document.getElementById('view-transfers').innerHTML = `
-    <div class="card"><h2>Транзакции</h2><div class="muted">Реальные данные из БД</div></div>
+    <div class="card"><h2>Транзакции</h2><div class="muted">Реальные данные из БД. По умолчанию скрываем только нулевые спам-транзакции (amount=0), денежные транзакции не скрываются.</div></div>
     <div class="card"><div class="row">
       <input id="t-start" type="date" value="${state.filters.start}" /><input id="t-end" type="date" value="${state.filters.end}" />
       <select id="t-direction"><option value="" ${state.filters.direction === '' ? 'selected' : ''}>Все направления</option><option value="incoming" ${state.filters.direction === 'incoming' ? 'selected' : ''}>Incoming</option><option value="outgoing" ${state.filters.direction === 'outgoing' ? 'selected' : ''}>Outgoing</option></select>
       <select id="t-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.filters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
       <select id="t-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.filters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
+      <label class="note" style="display:flex;align-items:center;gap:6px"><input id="t-include-spam" type="checkbox" ${state.filters.includeSpam ? 'checked' : ''} />Показывать нулевые/спам</label>
       <input id="t-wallet" list="wallet-options-transfers" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" value="${state.filters.walletAddress}" />
       ${walletOptionsDatalist('wallet-options-transfers')}
       <button id="t-apply">Применить</button>
@@ -341,6 +343,7 @@ function renderTransfers(){
   const tDirection = document.getElementById('t-direction');
   const tToken = document.getElementById('t-token');
   const tTag = document.getElementById('t-tag');
+  const tIncludeSpam = document.getElementById('t-include-spam');
   const tWallet = document.getElementById('t-wallet');
 
   const syncTransferFiltersFromUi = () => {
@@ -349,10 +352,11 @@ function renderTransfers(){
     state.filters.direction = tDirection.value || '';
     state.filters.tokenContract = tToken.value || '';
     state.filters.walletTag = tTag.value || '';
+    state.filters.includeSpam = !!tIncludeSpam.checked;
     state.filters.walletAddress = tWallet.value || '';
   };
 
-  [tStart, tEnd, tDirection, tToken, tTag, tWallet].forEach((el) => {
+  [tStart, tEnd, tDirection, tToken, tTag, tIncludeSpam, tWallet].forEach((el) => {
     el.addEventListener('change', syncTransferFiltersFromUi);
     el.addEventListener('input', syncTransferFiltersFromUi);
   });
@@ -395,6 +399,7 @@ function renderSummary(summaryRows = []){
       <select id="s-direction"><option value="" ${state.filters.direction === '' ? 'selected' : ''}>Все направления</option><option value="incoming" ${state.filters.direction === 'incoming' ? 'selected' : ''}>Incoming</option><option value="outgoing" ${state.filters.direction === 'outgoing' ? 'selected' : ''}>Outgoing</option></select>
       <select id="s-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.filters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
       <select id="s-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.filters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
+      <label class="note" style="display:flex;align-items:center;gap:6px"><input id="s-include-spam" type="checkbox" ${state.filters.includeSpam ? 'checked' : ''} />Показывать нулевые/спам</label>
       <input id="s-wallet" list="wallet-options-summary" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" value="${state.filters.walletAddress}" />
       ${walletOptionsDatalist('wallet-options-summary')}
       <button id="s-apply">Применить</button>
@@ -410,6 +415,7 @@ function renderSummary(summaryRows = []){
   const sDirection = document.getElementById('s-direction');
   const sToken = document.getElementById('s-token');
   const sTag = document.getElementById('s-tag');
+  const sIncludeSpam = document.getElementById('s-include-spam');
   const sWallet = document.getElementById('s-wallet');
 
   const syncSummaryFiltersFromUi = () => {
@@ -418,10 +424,11 @@ function renderSummary(summaryRows = []){
     state.filters.direction = sDirection.value || '';
     state.filters.tokenContract = sToken.value || '';
     state.filters.walletTag = sTag.value || '';
+    state.filters.includeSpam = !!sIncludeSpam.checked;
     state.filters.walletAddress = sWallet.value || '';
   };
 
-  [sStart, sEnd, sDirection, sToken, sTag, sWallet].forEach((el) => {
+  [sStart, sEnd, sDirection, sToken, sTag, sIncludeSpam, sWallet].forEach((el) => {
     el.addEventListener('change', syncSummaryFiltersFromUi);
     el.addEventListener('input', syncSummaryFiltersFromUi);
   });
