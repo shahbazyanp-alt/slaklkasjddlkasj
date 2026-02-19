@@ -63,6 +63,8 @@ const state = {
   whitelist: [],
   transfers: [],
   summaryMode: 'token',
+  transferFilters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '' },
+  summaryFilters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '' },
 };
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 6 });
@@ -230,23 +232,18 @@ function renderWhitelist(){
   };
 }
 
-function transferQuery(prefix = '') {
-  const s = document.getElementById(prefix + 'start')?.value || '';
-  const e = document.getElementById(prefix + 'end')?.value || '';
-  const d = document.getElementById(prefix + 'direction')?.value || '';
-  const t = document.getElementById(prefix + 'token')?.value || '';
-  const w = document.getElementById(prefix + 'wallet')?.value || '';
+function buildQueryFromFilters(filters) {
   const q = new URLSearchParams();
-  if (s) q.set('start', s);
-  if (e) q.set('end', e);
-  if (d) q.set('direction', d);
-  if (t) q.set('tokenContract', t);
-  if (w) q.set('walletAddress', w);
+  if (filters.start) q.set('start', filters.start);
+  if (filters.end) q.set('end', filters.end);
+  if (filters.direction) q.set('direction', filters.direction);
+  if (filters.tokenContract) q.set('tokenContract', filters.tokenContract);
+  if (filters.walletAddress) q.set('walletAddress', filters.walletAddress);
   return q.toString();
 }
 
 async function loadTransfers() {
-  const q = transferQuery('t-');
+  const q = buildQueryFromFilters(state.transferFilters);
   state.transfers = await api('/api/transfers' + (q ? '?' + q : ''));
   renderTransfers();
   renderOverview();
@@ -256,10 +253,10 @@ function renderTransfers(){
   document.getElementById('view-transfers').innerHTML = `
     <div class="card"><h2>Транзакции</h2><div class="muted">Реальные данные из БД</div></div>
     <div class="card"><div class="row">
-      <input id="t-start" type="date" /><input id="t-end" type="date" />
-      <select id="t-direction"><option value="">Все направления</option><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></select>
-      ${tokenOptions('t-token')}
-      <input id="t-wallet" list="wallet-options-transfers" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" />
+      <input id="t-start" type="date" value="${state.transferFilters.start}" /><input id="t-end" type="date" value="${state.transferFilters.end}" />
+      <select id="t-direction"><option value="" ${state.transferFilters.direction === '' ? 'selected' : ''}>Все направления</option><option value="incoming" ${state.transferFilters.direction === 'incoming' ? 'selected' : ''}>Incoming</option><option value="outgoing" ${state.transferFilters.direction === 'outgoing' ? 'selected' : ''}>Outgoing</option></select>
+      <select id="t-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.transferFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
+      <input id="t-wallet" list="wallet-options-transfers" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" value="${state.transferFilters.walletAddress}" />
       ${walletOptionsDatalist('wallet-options-transfers')}
       <button id="t-apply">Применить</button>
       <button id="t-refresh">Обновить</button>
@@ -270,7 +267,14 @@ function renderTransfers(){
     <div class="card"><table><thead><tr><th>Дата</th><th>Кошелёк</th><th>Токен</th><th>Напр.</th><th>Сумма</th><th>TX</th></tr></thead>
       <tbody>${state.transfers.map(t=>`<tr><td>${new Date(t.blockTimestamp).toLocaleString('ru-RU')}</td><td>${t.wallet?.address || ''}</td><td>${t.tokenName}</td><td><span class="pill ${t.direction==='incoming'?'in':'out'}">${t.direction}</span></td><td>${fmt(t.amountNormalized)}</td><td><a href="https://etherscan.io/tx/${t.txHash}" target="_blank" rel="noopener noreferrer">${t.txHash.slice(0,12)}...</a></td></tr>`).join('')}</tbody></table></div>`;
 
-  document.getElementById('t-apply').onclick = loadTransfers;
+  document.getElementById('t-apply').onclick = async () => {
+    state.transferFilters.start = document.getElementById('t-start').value || '';
+    state.transferFilters.end = document.getElementById('t-end').value || '';
+    state.transferFilters.direction = document.getElementById('t-direction').value || '';
+    state.transferFilters.tokenContract = document.getElementById('t-token').value || '';
+    state.transferFilters.walletAddress = document.getElementById('t-wallet').value || '';
+    await loadTransfers();
+  };
   document.getElementById('t-refresh').onclick = async () => { await refreshAll(); await loadTransfers(); };
   document.getElementById('t-sync').onclick = async () => {
     const note = document.getElementById('t-sync-note');
@@ -290,7 +294,7 @@ function renderTransfers(){
 }
 
 async function loadSummary() {
-  const q = transferQuery('s-');
+  const q = buildQueryFromFilters(state.summaryFilters);
   const data = await api(`/api/summary?mode=${state.summaryMode}` + (q ? '&' + q : ''));
   renderSummary(data);
 }
@@ -299,10 +303,10 @@ function renderSummary(summaryRows = []){
   document.getElementById('view-summary').innerHTML = `
     <div class="card"><h2>Сводка</h2><div class="muted">Итоги по токенам или кошелькам</div></div>
     <div class="card"><div class="row">
-      <input id="s-start" type="date" /><input id="s-end" type="date" />
-      <select id="s-direction"><option value="">Все направления</option><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></select>
-      ${tokenOptions('s-token')}
-      <input id="s-wallet" list="wallet-options-summary" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" />
+      <input id="s-start" type="date" value="${state.summaryFilters.start}" /><input id="s-end" type="date" value="${state.summaryFilters.end}" />
+      <select id="s-direction"><option value="" ${state.summaryFilters.direction === '' ? 'selected' : ''}>Все направления</option><option value="incoming" ${state.summaryFilters.direction === 'incoming' ? 'selected' : ''}>Incoming</option><option value="outgoing" ${state.summaryFilters.direction === 'outgoing' ? 'selected' : ''}>Outgoing</option></select>
+      <select id="s-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.summaryFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
+      <input id="s-wallet" list="wallet-options-summary" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" value="${state.summaryFilters.walletAddress}" />
       ${walletOptionsDatalist('wallet-options-summary')}
       <button id="s-apply">Применить</button>
       <button id="s-refresh">Обновить</button>
@@ -312,7 +316,14 @@ function renderSummary(summaryRows = []){
     <div class="card"><table><thead><tr><th>${state.summaryMode === 'token' ? 'Токен' : 'Кошелёк'}</th>${state.summaryMode === 'wallet' ? '<th>Теги</th>' : ''}<th>Вход</th><th>Выход</th></tr></thead>
       <tbody>${summaryRows.map(r => `<tr><td>${r.key}</td>${state.summaryMode === 'wallet' ? `<td>${(r.walletTags || []).join(', ')}</td>` : ''}<td class="in">${fmt(r.incoming)}</td><td class="out">${fmt(r.outgoing)}</td></tr>`).join('')}</tbody></table></div>`;
 
-  document.getElementById('s-apply').onclick = loadSummary;
+  document.getElementById('s-apply').onclick = async () => {
+    state.summaryFilters.start = document.getElementById('s-start').value || '';
+    state.summaryFilters.end = document.getElementById('s-end').value || '';
+    state.summaryFilters.direction = document.getElementById('s-direction').value || '';
+    state.summaryFilters.tokenContract = document.getElementById('s-token').value || '';
+    state.summaryFilters.walletAddress = document.getElementById('s-wallet').value || '';
+    await loadSummary();
+  };
   document.getElementById('s-refresh').onclick = async () => { await refreshAll(); await loadSummary(); };
   document.getElementById('s-mode-token').onclick = async () => { state.summaryMode = 'token'; await loadSummary(); };
   document.getElementById('s-mode-wallet').onclick = async () => { state.summaryMode = 'wallet'; await loadSummary(); };
