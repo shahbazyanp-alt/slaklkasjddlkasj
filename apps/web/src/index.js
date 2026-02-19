@@ -370,7 +370,7 @@ async function handleApi(req, res) {
     return sendJson(res, 200, { ...syncState, progress });
   }
 
-  // balances
+  // balances (ledger)
   if (req.method === 'GET' && url.pathname === '/api/balances') {
     const tokenContract = url.searchParams.get('tokenContract');
     const walletTag = url.searchParams.get('walletTag');
@@ -407,6 +407,61 @@ async function handleApi(req, res) {
     const rows = Array.from(map.values())
       .map((r) => ({ ...r, balance: Math.abs(r.balance) < 1e-9 ? 0 : r.balance }))
       .sort((a, b) => a.balance - b.balance);
+    return sendJson(res, 200, rows);
+  }
+
+  // balances (etherscan)
+  if (req.method === 'GET' && url.pathname === '/api/balances/etherscan') {
+    const apiKey = process.env.ETHERSCAN_API_KEY;
+    if (!apiKey) return sendJson(res, 400, { error: 'ETHERSCAN_API_KEY is not set' });
+
+    const tokenContract = url.searchParams.get('tokenContract');
+    const walletTag = url.searchParams.get('walletTag');
+
+    const client = makeEtherscanClient({ apiKey });
+    const wallets = await prisma.wallet.findMany({
+      where: walletTag ? { tags: { some: { tag: walletTag } } } : undefined,
+      orderBy: { createdAt: 'asc' },
+    });
+    const whitelist = await prisma.tokenWhitelist.findMany({
+      where: { chain: 'ethereum', ...(tokenContract ? { contractAddress: tokenContract } : {}) },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const rows = [];
+    let lastCallAt = 0;
+    for (const w of wallets) {
+      for (const t of whitelist) {
+        const now = Date.now();
+        const wait = Math.max(0, ETHERSCAN_MIN_INTERVAL_MS - (now - lastCallAt));
+        if (wait > 0) await sleep(wait);
+
+        let raw;
+        for (let attempt = 1; attempt <= 5; attempt += 1) {
+          try {
+            raw = await client.fetchTokenBalance(w.address, t.contractAddress);
+            break;
+          } catch (e) {
+            const msg = String(e?.message || e).toLowerCase();
+            const rateLimited = msg.includes('rate limit') || msg.includes('max calls per sec');
+            if (!rateLimited || attempt === 5) throw e;
+            await sleep(attempt * 500);
+          }
+        }
+        lastCallAt = Date.now();
+
+        const balance = Number(raw || '0') / 1e6; // USDT/USDC now; expand with token decimals later
+        rows.push({
+          walletAddress: w.address,
+          walletNumber: w.walletNumber,
+          tokenContract: t.contractAddress,
+          tokenName: t.tokenName,
+          balance,
+        });
+      }
+    }
+
+    rows.sort((a, b) => a.balance - b.balance);
     return sendJson(res, 200, rows);
   }
 

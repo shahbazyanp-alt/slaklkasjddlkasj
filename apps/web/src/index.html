@@ -51,7 +51,8 @@
       <section id="view-whitelist" class="view hidden"></section>
       <section id="view-transfers" class="view hidden"></section>
       <section id="view-summary" class="view hidden"></section>
-      <section id="view-balances" class="view hidden"></section>
+      <section id="view-balances-ledger" class="view hidden"></section>
+      <section id="view-balances-etherscan" class="view hidden"></section>
       <section id="view-tags" class="view hidden"></section>
       <section id="view-settings" class="view hidden"></section>
     </main>
@@ -60,7 +61,7 @@
 <script>
 const tabs = [
   ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
-  ['transfers','Транзакции'], ['summary','Сводка'], ['balances','Балансы'], ['tags','Теги'], ['settings','Настройки']
+  ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки']
 ];
 
 const state = {
@@ -69,6 +70,7 @@ const state = {
   transfers: [],
   tags: [],
   balances: [],
+  balancesEtherscan: [],
   summaryMode: 'token',
   filters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '', walletTag: '', includeSpam: false },
   balanceFilters: { tokenContract: '', walletTag: '' },
@@ -133,8 +135,11 @@ async function setTab(tab){
   if (tab === 'summary') {
     await loadSummary();
   }
-  if (tab === 'balances') {
+  if (tab === 'balances-ledger') {
     await loadBalances();
+  }
+  if (tab === 'balances-etherscan') {
+    await loadBalancesEtherscan();
   }
   if (tab === 'tags') {
     renderTagsAdmin();
@@ -478,8 +483,8 @@ async function loadBalances() {
 }
 
 function renderBalances() {
-  document.getElementById('view-balances').innerHTML = `
-    <div class="card"><h2>Балансы</h2><div class="muted">Баланс по выбранным токенам на кошельках из системы, сортировка от меньшего к большему.</div></div>
+  document.getElementById('view-balances-ledger').innerHTML = `
+    <div class="card"><h2>balanceLedger</h2><div class="muted">Расчётный баланс по ledger (вход - выход) в нашей БД.</div></div>
     <div class="card"><div class="row">
       <select id="b-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.balanceFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
       <select id="b-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.balanceFilters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
@@ -502,6 +507,42 @@ function renderBalances() {
     await loadBalances();
   };
   document.getElementById('b-refresh').onclick = loadBalances;
+}
+
+async function loadBalancesEtherscan() {
+  const q = new URLSearchParams();
+  if (state.balanceFilters.tokenContract) q.set('tokenContract', state.balanceFilters.tokenContract);
+  if (state.balanceFilters.walletTag) q.set('walletTag', state.balanceFilters.walletTag);
+  state.balancesEtherscan = await api('/api/balances/etherscan' + (q.toString() ? `?${q.toString()}` : ''));
+  state.balancesEtherscan.sort((a, b) => state.balanceSort === 'asc' ? (a.balance - b.balance) : (b.balance - a.balance));
+  renderBalancesEtherscan();
+}
+
+function renderBalancesEtherscan() {
+  document.getElementById('view-balances-etherscan').innerHTML = `
+    <div class="card"><h2>balanceEtherscan</h2><div class="muted">Текущий баланс, полученный напрямую из Etherscan API.</div></div>
+    <div class="card"><div class="row">
+      <select id="be-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.balanceFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
+      <select id="be-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.balanceFilters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
+      <button id="be-sort-toggle">Сортировка: ${state.balanceSort === 'asc' ? 'по возрастанию' : 'по убыванию'}</button>
+      <button id="be-apply">Применить</button>
+      <button id="be-refresh">Обновить</button>
+    </div></div>
+    <div class="card"><table>
+      <thead><tr><th>Номер кошелька</th><th>Кошелёк</th><th>Токен</th><th>Баланс</th></tr></thead>
+      <tbody>${state.balancesEtherscan.map(r => `<tr><td>${r.walletNumber || ''}</td><td>${r.walletAddress}</td><td>${r.tokenName || ''}</td><td>${fmt(r.balance)}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+
+  document.getElementById('be-sort-toggle').onclick = async () => {
+    state.balanceSort = state.balanceSort === 'asc' ? 'desc' : 'asc';
+    await loadBalancesEtherscan();
+  };
+  document.getElementById('be-apply').onclick = async () => {
+    state.balanceFilters.tokenContract = document.getElementById('be-token').value || '';
+    state.balanceFilters.walletTag = document.getElementById('be-tag').value || '';
+    await loadBalancesEtherscan();
+  };
+  document.getElementById('be-refresh').onclick = loadBalancesEtherscan;
 }
 
 function renderTagsAdmin(){
