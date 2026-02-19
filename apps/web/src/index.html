@@ -33,6 +33,9 @@
     .progress-wrap { width: 320px; max-width: 100%; }
     .progress-bar { width: 100%; height: 10px; border-radius: 999px; background: #1b2847; overflow: hidden; border:1px solid #2a3a64; }
     .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #5aa9ff, #3ddc97); transition: width .25s ease; }
+    .sync-log { max-height: 180px; overflow:auto; padding:10px; background:#0b1226; border:1px solid #2a3a64; border-radius:10px; font-size:12px; }
+    .sync-log .warn { color:#ffd166; }
+    .sync-log .error { color:#ff6b6b; }
   </style>
 </head>
 <body>
@@ -90,7 +93,18 @@ async function pollSyncStatus(onTick) {
   }
 }
 
-async function startSyncWithProgress(noteEl, fillEl) {
+function renderSyncLogs(logEl, logs = []) {
+  if (!logEl) return;
+  const rows = logs.slice(-80).map((l) => {
+    const cls = l.level === 'warn' ? 'warn' : l.level === 'error' ? 'error' : '';
+    const time = new Date(l.ts).toLocaleTimeString('ru-RU');
+    return `<div class="${cls}">[${time}] ${l.message}</div>`;
+  });
+  logEl.innerHTML = rows.join('') || '<div class="muted">Лог пуст</div>';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function startSyncWithProgress(noteEl, fillEl, logEl) {
   await api('/api/sync/trigger', { method: 'POST' });
   const finalStatus = await pollSyncStatus((status) => {
     fillEl.style.width = `${status.progress || 0}%`;
@@ -99,6 +113,7 @@ async function startSyncWithProgress(noteEl, fillEl) {
       : (status.error
         ? `Ошибка: ${status.error}`
         : `Готово: ${status.processedWallets}/${status.totalWallets}, +${status.inserted}`);
+    renderSyncLogs(logEl, status.logs || []);
   });
   return finalStatus;
 }
@@ -150,15 +165,19 @@ function renderOverview(){
         <div class="progress-bar"><div id="sync-progress-fill" class="progress-fill"></div></div>
       </div>
       <span class="note" id="sync-note"></span>
-    </div></div>`;
+    </div>
+    <div style="margin-top:10px" class="sync-log" id="sync-log"></div>
+    </div>`;
 
   document.getElementById('manual-sync').onclick = async () => {
     const note = document.getElementById('sync-note');
     const fill = document.getElementById('sync-progress-fill');
+    const log = document.getElementById('sync-log');
     note.textContent = 'Запуск...';
     fill.style.width = '0%';
+    renderSyncLogs(log, []);
     try {
-      await startSyncWithProgress(note, fill);
+      await startSyncWithProgress(note, fill, log);
       await refreshAll();
       renderOverview();
       renderTransfers();
@@ -301,7 +320,9 @@ function renderTransfers(){
       <button id="t-sync" class="primary">Искать в Etherscan</button>
       <div class="progress-wrap"><div class="progress-bar"><div id="t-sync-fill" class="progress-fill"></div></div></div>
       <span id="t-sync-note" class="note"></span>
-    </div></div>
+    </div>
+    <div style="margin-top:10px" class="sync-log" id="t-sync-log"></div>
+    </div>
     <div class="card"><table><thead><tr><th>Дата</th><th>Кошелёк</th><th>Токен</th><th>Напр.</th><th>Сумма</th><th>TX</th></tr></thead>
       <tbody>${state.transfers.map(t=>`<tr><td>${new Date(t.blockTimestamp).toLocaleString('ru-RU')}</td><td>${t.wallet?.address || ''}</td><td>${t.tokenName}</td><td><span class="pill ${t.direction==='incoming'?'in':'out'}">${t.direction}</span></td><td>${fmt(t.amountNormalized)}</td><td><a href="https://etherscan.io/tx/${t.txHash}" target="_blank" rel="noopener noreferrer">${t.txHash.slice(0,12)}...</a></td></tr>`).join('')}</tbody></table></div>`;
 
@@ -334,10 +355,12 @@ function renderTransfers(){
   document.getElementById('t-sync').onclick = async () => {
     const note = document.getElementById('t-sync-note');
     const fill = document.getElementById('t-sync-fill');
+    const log = document.getElementById('t-sync-log');
     note.textContent = 'Запуск...';
     fill.style.width = '0%';
+    renderSyncLogs(log, []);
     try {
-      await startSyncWithProgress(note, fill);
+      await startSyncWithProgress(note, fill, log);
       await refreshAll();
       await loadTransfers();
       renderOverview();

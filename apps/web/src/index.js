@@ -15,7 +15,13 @@ const syncState = {
   startedAt: null,
   finishedAt: null,
   error: null,
+  logs: [],
 };
+
+function pushSyncLog(message, level = 'info') {
+  syncState.logs.push({ ts: new Date().toISOString(), level, message });
+  if (syncState.logs.length > 300) syncState.logs.splice(0, syncState.logs.length - 300);
+}
 
 function sendJson(res, status, payload) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -67,10 +73,13 @@ async function runManualSync() {
   syncState.totalWallets = wallets.length;
   syncState.processedWallets = 0;
   syncState.inserted = 0;
+  syncState.logs = [];
+  pushSyncLog(`Sync started. Wallets in queue: ${wallets.length}`);
 
   try {
     let lastCallAt = 0;
     for (const wallet of wallets) {
+      pushSyncLog(`Processing wallet ${wallet.address}`);
       const now = Date.now();
       const wait = Math.max(0, ETHERSCAN_MIN_INTERVAL_MS - (now - lastCallAt));
       if (wait > 0) await sleep(wait);
@@ -79,11 +88,13 @@ async function runManualSync() {
       for (let attempt = 1; attempt <= 5; attempt += 1) {
         try {
           response = await client.fetchErc20Transfers(wallet.address, 1, 200);
+          if (attempt > 1) pushSyncLog(`Recovered after retry for ${wallet.address} (attempt ${attempt})`, 'warn');
           break;
         } catch (e) {
           const msg = String(e?.message || e).toLowerCase();
           const rateLimited = msg.includes('rate limit') || msg.includes('max calls per sec');
           if (!rateLimited || attempt === 5) throw e;
+          pushSyncLog(`Rate limited on ${wallet.address}, retry ${attempt}/5`, 'warn');
           await sleep(attempt * 500);
         }
       }
@@ -139,13 +150,16 @@ async function runManualSync() {
       });
 
       syncState.processedWallets += 1;
+      pushSyncLog(`Wallet done ${wallet.address}. Progress ${syncState.processedWallets}/${syncState.totalWallets}, inserted +${syncState.inserted}`);
     }
 
     syncState.finishedAt = new Date().toISOString();
+    pushSyncLog(`Sync finished successfully. Total inserted: ${syncState.inserted}`);
     return { wallets: wallets.length, inserted: syncState.inserted };
   } catch (error) {
     syncState.error = String(error?.message || error);
     syncState.finishedAt = new Date().toISOString();
+    pushSyncLog(`Sync failed: ${syncState.error}`, 'error');
     throw error;
   } finally {
     syncState.running = false;
@@ -307,6 +321,7 @@ async function handleApi(req, res) {
 
   if (req.method === 'POST' && url.pathname === '/api/sync/trigger') {
     if (syncState.running) {
+      pushSyncLog('Sync trigger ignored: already running', 'warn');
       return sendJson(res, 200, { ok: true, started: false, message: 'sync already running' });
     }
     runManualSync().catch((e) => {
