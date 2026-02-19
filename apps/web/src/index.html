@@ -30,6 +30,9 @@
     .hidden { display:none; }
     .kpi { font-size:22px; font-weight:700; }
     .note { font-size:12px; color:var(--muted); }
+    .progress-wrap { width: 320px; max-width: 100%; }
+    .progress-bar { width: 100%; height: 10px; border-radius: 999px; background: #1b2847; overflow: hidden; border:1px solid #2a3a64; }
+    .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #5aa9ff, #3ddc97); transition: width .25s ease; }
   </style>
 </head>
 <body>
@@ -75,6 +78,28 @@ async function api(path, opts = {}) {
   return data;
 }
 
+async function pollSyncStatus(onTick) {
+  while (true) {
+    const status = await api('/api/sync/status');
+    onTick(status);
+    if (!status.running) return status;
+    await new Promise(r => setTimeout(r, 1200));
+  }
+}
+
+async function startSyncWithProgress(noteEl, fillEl) {
+  await api('/api/sync/trigger', { method: 'POST' });
+  const finalStatus = await pollSyncStatus((status) => {
+    fillEl.style.width = `${status.progress || 0}%`;
+    noteEl.textContent = status.running
+      ? `Синк: ${status.processedWallets}/${status.totalWallets} кошельков, +${status.inserted} записей`
+      : (status.error
+        ? `Ошибка: ${status.error}`
+        : `Готово: ${status.processedWallets}/${status.totalWallets}, +${status.inserted}`);
+  });
+  return finalStatus;
+}
+
 function setTab(tab){
   document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));
   document.getElementById('view-'+tab).classList.remove('hidden');
@@ -106,15 +131,25 @@ function renderOverview(){
       <div class="card"><div class="muted">Входящие (текущая выборка)</div><div class="kpi in">${fmt(incoming)}</div></div>
       <div class="card"><div class="muted">Исходящие (текущая выборка)</div><div class="kpi out">${fmt(outgoing)}</div></div>
     </div>
-    <div class="card"><div class="row"><button id="manual-sync" class="primary">Обновить из Etherscan</button><span class="note" id="sync-note"></span></div></div>`;
+    <div class="card"><div class="row">
+      <button id="manual-sync" class="primary">Запустить поиск транзакций (Etherscan)</button>
+      <div class="progress-wrap">
+        <div class="progress-bar"><div id="sync-progress-fill" class="progress-fill"></div></div>
+      </div>
+      <span class="note" id="sync-note"></span>
+    </div></div>`;
 
   document.getElementById('manual-sync').onclick = async () => {
     const note = document.getElementById('sync-note');
-    note.textContent = 'Синхронизация...';
+    const fill = document.getElementById('sync-progress-fill');
+    note.textContent = 'Запуск...';
+    fill.style.width = '0%';
     try {
-      const r = await api('/api/sync/trigger', { method: 'POST' });
-      note.textContent = `Готово: wallets=${r.wallets}, inserted=${r.inserted}`;
+      await startSyncWithProgress(note, fill);
       await refreshAll();
+      renderOverview();
+      renderTransfers();
+      await loadSummary();
     } catch (e) {
       note.textContent = 'Ошибка: ' + e.message;
     }
@@ -132,8 +167,8 @@ function renderWallets(){
       <span class="note" id="wallet-note"></span>
     </div></div>
     <div class="card">
-      <table><thead><tr><th>Address</th><th>Label</th><th>Тег кошелька</th></tr></thead>
-      <tbody>${state.wallets.map(w=>`<tr><td>${w.address}</td><td>${w.label || ''}</td><td>${(w.tags || []).map(t=>t.tag).join(', ')}</td></tr>`).join('')}</tbody></table>
+      <table><thead><tr><th>Address</th><th>Label</th><th>Тег кошелька</th><th></th></tr></thead>
+      <tbody>${state.wallets.map(w=>`<tr><td>${w.address}</td><td>${w.label || ''}</td><td>${(w.tags || []).map(t=>t.tag).join(', ')}</td><td><button data-delete-wallet="${w.id}">Удалить</button></td></tr>`).join('')}</tbody></table>
     </div>`;
 
   document.getElementById('add-wallet').onclick = async () => {
@@ -146,10 +181,26 @@ function renderWallets(){
       note.textContent = 'Добавлено';
       await refreshAll();
       renderWallets();
+      renderOverview();
     } catch (e) {
       note.textContent = 'Ошибка: ' + e.message;
     }
   };
+
+  document.querySelectorAll('[data-delete-wallet]').forEach((btn) => {
+    btn.onclick = async () => {
+      const note = document.getElementById('wallet-note');
+      try {
+        await api(`/api/wallets?id=${btn.dataset.deleteWallet}`, { method: 'DELETE' });
+        note.textContent = 'Кошелёк удалён';
+        await refreshAll();
+        renderWallets();
+        renderOverview();
+      } catch (e) {
+        note.textContent = 'Ошибка: ' + e.message;
+      }
+    };
+  });
 }
 
 function renderWhitelist(){
@@ -212,12 +263,30 @@ function renderTransfers(){
       ${walletOptionsDatalist('wallet-options-transfers')}
       <button id="t-apply">Применить</button>
       <button id="t-refresh">Обновить</button>
+      <button id="t-sync" class="primary">Искать в Etherscan</button>
+      <div class="progress-wrap"><div class="progress-bar"><div id="t-sync-fill" class="progress-fill"></div></div></div>
+      <span id="t-sync-note" class="note"></span>
     </div></div>
     <div class="card"><table><thead><tr><th>Дата</th><th>Кошелёк</th><th>Токен</th><th>Напр.</th><th>Сумма</th><th>TX</th></tr></thead>
       <tbody>${state.transfers.map(t=>`<tr><td>${new Date(t.blockTimestamp).toLocaleString('ru-RU')}</td><td>${t.wallet?.address || ''}</td><td>${t.tokenName}</td><td><span class="pill ${t.direction==='incoming'?'in':'out'}">${t.direction}</span></td><td>${fmt(t.amountNormalized)}</td><td>${t.txHash.slice(0,12)}...</td></tr>`).join('')}</tbody></table></div>`;
 
   document.getElementById('t-apply').onclick = loadTransfers;
   document.getElementById('t-refresh').onclick = async () => { await refreshAll(); await loadTransfers(); };
+  document.getElementById('t-sync').onclick = async () => {
+    const note = document.getElementById('t-sync-note');
+    const fill = document.getElementById('t-sync-fill');
+    note.textContent = 'Запуск...';
+    fill.style.width = '0%';
+    try {
+      await startSyncWithProgress(note, fill);
+      await refreshAll();
+      await loadTransfers();
+      renderOverview();
+      await loadSummary();
+    } catch (e) {
+      note.textContent = 'Ошибка: ' + e.message;
+    }
+  };
 }
 
 async function loadSummary() {

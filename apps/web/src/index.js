@@ -7,6 +7,16 @@ import { makeEtherscanClient } from '../../../packages/etherscan-client/src/inde
 const port = process.env.PORT || 3000;
 const html = readFileSync(join(import.meta.dirname, 'index.html'), 'utf8');
 
+const syncState = {
+  running: false,
+  totalWallets: 0,
+  processedWallets: 0,
+  inserted: 0,
+  startedAt: null,
+  finishedAt: null,
+  error: null,
+};
+
 function sendJson(res, status, payload) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(payload));
@@ -45,61 +55,79 @@ async function runManualSync() {
   const whitelist = await prisma.tokenWhitelist.findMany({ where: { chain: 'ethereum' } });
   const whitelistMap = new Map(whitelist.map((x) => [normalizeAddress(x.contractAddress), x]));
 
-  let total = 0;
-  for (const wallet of wallets) {
-    const response = await client.fetchErc20Transfers(wallet.address, 1, 200);
-    const result = Array.isArray(response?.result) ? response.result : [];
+  syncState.running = true;
+  syncState.startedAt = new Date().toISOString();
+  syncState.finishedAt = null;
+  syncState.error = null;
+  syncState.totalWallets = wallets.length;
+  syncState.processedWallets = 0;
+  syncState.inserted = 0;
 
-    for (const tx of result) {
-      const contract = normalizeAddress(tx.contractAddress);
-      const wl = whitelistMap.get(contract);
-      if (!wl) continue;
+  try {
+    for (const wallet of wallets) {
+      const response = await client.fetchErc20Transfers(wallet.address, 1, 200);
+      const result = Array.isArray(response?.result) ? response.result : [];
 
-      const confirmations = Number(tx.confirmations || 0);
-      if (!Number.isFinite(confirmations) || confirmations <= 0) continue;
+      for (const tx of result) {
+        const contract = normalizeAddress(tx.contractAddress);
+        const wl = whitelistMap.get(contract);
+        if (!wl) continue;
 
-      const from = normalizeAddress(tx.from);
-      const to = normalizeAddress(tx.to);
-      const walletAddr = normalizeAddress(wallet.address);
-      const direction = to === walletAddr ? 'incoming' : from === walletAddr ? 'outgoing' : null;
-      if (!direction) continue;
+        const confirmations = Number(tx.confirmations || 0);
+        if (!Number.isFinite(confirmations) || confirmations <= 0) continue;
 
-      try {
-        await prisma.erc20Transfer.create({
-          data: {
-            walletId: wallet.id,
-            chain: 'ethereum',
-            txHash: String(tx.hash),
-            logIndex: Number(tx.logIndex || 0),
-            blockNumber: BigInt(tx.blockNumber || 0),
-            blockTimestamp: new Date(Number(tx.timeStamp || 0) * 1000),
-            direction,
-            tokenContract: String(tx.contractAddress),
-            tokenName: wl.tokenName,
-            tokenSymbol: tx.tokenSymbol ? String(tx.tokenSymbol) : null,
-            tokenDecimals: tx.tokenDecimal ? Number(tx.tokenDecimal) : null,
-            amountRaw: String(tx.value || '0'),
-            amountNormalized: normalizeAmount(tx.value, tx.tokenDecimal),
-            fromAddress: String(tx.from || ''),
-            toAddress: String(tx.to || ''),
-            confirmations,
-            isConfirmed: true,
-          },
-        });
-        total += 1;
-      } catch (e) {
-        if (!String(e?.message || e).includes('Unique constraint')) throw e;
+        const from = normalizeAddress(tx.from);
+        const to = normalizeAddress(tx.to);
+        const walletAddr = normalizeAddress(wallet.address);
+        const direction = to === walletAddr ? 'incoming' : from === walletAddr ? 'outgoing' : null;
+        if (!direction) continue;
+
+        try {
+          await prisma.erc20Transfer.create({
+            data: {
+              walletId: wallet.id,
+              chain: 'ethereum',
+              txHash: String(tx.hash),
+              logIndex: Number(tx.logIndex || 0),
+              blockNumber: BigInt(tx.blockNumber || 0),
+              blockTimestamp: new Date(Number(tx.timeStamp || 0) * 1000),
+              direction,
+              tokenContract: String(tx.contractAddress),
+              tokenName: wl.tokenName,
+              tokenSymbol: tx.tokenSymbol ? String(tx.tokenSymbol) : null,
+              tokenDecimals: tx.tokenDecimal ? Number(tx.tokenDecimal) : null,
+              amountRaw: String(tx.value || '0'),
+              amountNormalized: normalizeAmount(tx.value, tx.tokenDecimal),
+              fromAddress: String(tx.from || ''),
+              toAddress: String(tx.to || ''),
+              confirmations,
+              isConfirmed: true,
+            },
+          });
+          syncState.inserted += 1;
+        } catch (e) {
+          if (!String(e?.message || e).includes('Unique constraint')) throw e;
+        }
       }
+
+      await prisma.walletSyncState.upsert({
+        where: { walletId: wallet.id },
+        create: { walletId: wallet.id, backfillCompleted: true, lastSyncedAt: new Date() },
+        update: { backfillCompleted: true, lastSyncedAt: new Date() },
+      });
+
+      syncState.processedWallets += 1;
     }
 
-    await prisma.walletSyncState.upsert({
-      where: { walletId: wallet.id },
-      create: { walletId: wallet.id, backfillCompleted: true, lastSyncedAt: new Date() },
-      update: { backfillCompleted: true, lastSyncedAt: new Date() },
-    });
+    syncState.finishedAt = new Date().toISOString();
+    return { wallets: wallets.length, inserted: syncState.inserted };
+  } catch (error) {
+    syncState.error = String(error?.message || error);
+    syncState.finishedAt = new Date().toISOString();
+    throw error;
+  } finally {
+    syncState.running = false;
   }
-
-  return { wallets: wallets.length, inserted: total };
 }
 
 async function handleApi(req, res) {
@@ -127,6 +155,13 @@ async function handleApi(req, res) {
       include: { tags: true },
     });
     return sendJson(res, 201, created);
+  }
+
+  if (req.method === 'DELETE' && url.pathname === '/api/wallets') {
+    const id = String(url.searchParams.get('id') || '').trim();
+    if (!id) return sendJson(res, 400, { error: 'id is required' });
+    await prisma.wallet.delete({ where: { id } });
+    return sendJson(res, 200, { ok: true });
   }
 
   // whitelist
@@ -174,8 +209,20 @@ async function handleApi(req, res) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/sync/trigger') {
-    const stats = await runManualSync();
-    return sendJson(res, 200, { ok: true, ...stats });
+    if (syncState.running) {
+      return sendJson(res, 200, { ok: true, started: false, message: 'sync already running' });
+    }
+    runManualSync().catch((e) => {
+      console.error('sync failed', e);
+    });
+    return sendJson(res, 202, { ok: true, started: true });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/sync/status') {
+    const progress = syncState.totalWallets > 0
+      ? Math.round((syncState.processedWallets / syncState.totalWallets) * 100)
+      : 0;
+    return sendJson(res, 200, { ...syncState, progress });
   }
 
   // summary
