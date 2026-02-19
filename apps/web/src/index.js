@@ -164,6 +164,36 @@ async function handleApi(req, res) {
     return sendJson(res, 200, { ok: true });
   }
 
+  // tag admin
+  if (req.method === 'GET' && url.pathname === '/api/tags') {
+    const rows = await prisma.walletTag.groupBy({
+      by: ['tag'],
+      _count: { walletId: true },
+      orderBy: { tag: 'asc' },
+    });
+    return sendJson(res, 200, rows.map((r) => ({ tag: r.tag, walletCount: r._count.walletId })));
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/tags/assign') {
+    const body = await readJsonBody(req);
+    const tag = String(body.tag || '').trim();
+    const walletIds = Array.isArray(body.walletIds) ? body.walletIds.map((x) => String(x).trim()).filter(Boolean) : [];
+    if (!tag) return sendJson(res, 400, { error: 'tag is required' });
+    if (!walletIds.length) return sendJson(res, 400, { error: 'walletIds is required' });
+
+    let assigned = 0;
+    for (const walletId of walletIds) {
+      try {
+        await prisma.walletTag.create({ data: { walletId, tag } });
+        assigned += 1;
+      } catch (e) {
+        if (!String(e?.message || e).includes('Unique constraint')) throw e;
+      }
+    }
+
+    return sendJson(res, 200, { ok: true, tag, assigned, wallets: walletIds.length });
+  }
+
   // whitelist
   if (req.method === 'GET' && url.pathname === '/api/whitelist') {
     const items = await prisma.tokenWhitelist.findMany({ orderBy: { createdAt: 'desc' } });
@@ -191,13 +221,17 @@ async function handleApi(req, res) {
     const direction = url.searchParams.get('direction');
     const tokenContract = url.searchParams.get('tokenContract');
     const walletAddress = url.searchParams.get('walletAddress');
+    const walletTag = url.searchParams.get('walletTag');
 
     const items = await prisma.erc20Transfer.findMany({
       where: {
         isConfirmed: true,
         direction: direction === 'incoming' || direction === 'outgoing' ? direction : undefined,
         tokenContract: tokenContract || undefined,
-        wallet: walletAddress ? { address: walletAddress } : undefined,
+        wallet: {
+          ...(walletAddress ? { address: walletAddress } : {}),
+          ...(walletTag ? { tags: { some: { tag: walletTag } } } : {}),
+        },
         blockTimestamp: start || end ? { gte: start, lte: end } : undefined,
       },
       include: { wallet: { include: { tags: true } } },
@@ -233,13 +267,17 @@ async function handleApi(req, res) {
     const direction = url.searchParams.get('direction');
     const tokenContract = url.searchParams.get('tokenContract');
     const walletAddress = url.searchParams.get('walletAddress');
+    const walletTag = url.searchParams.get('walletTag');
 
     const transfers = await prisma.erc20Transfer.findMany({
       where: {
         isConfirmed: true,
         direction: direction === 'incoming' || direction === 'outgoing' ? direction : undefined,
         tokenContract: tokenContract || undefined,
-        wallet: walletAddress ? { address: walletAddress } : undefined,
+        wallet: {
+          ...(walletAddress ? { address: walletAddress } : {}),
+          ...(walletTag ? { tags: { some: { tag: walletTag } } } : {}),
+        },
         blockTimestamp: start || end ? { gte: start, lte: end } : undefined,
       },
       include: { wallet: { include: { tags: true } } },

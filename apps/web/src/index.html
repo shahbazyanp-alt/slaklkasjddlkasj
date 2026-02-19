@@ -48,6 +48,7 @@
       <section id="view-whitelist" class="view hidden"></section>
       <section id="view-transfers" class="view hidden"></section>
       <section id="view-summary" class="view hidden"></section>
+      <section id="view-tags" class="view hidden"></section>
       <section id="view-settings" class="view hidden"></section>
     </main>
   </div>
@@ -55,15 +56,16 @@
 <script>
 const tabs = [
   ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
-  ['transfers','Транзакции'], ['summary','Сводка'], ['settings','Настройки']
+  ['transfers','Транзакции'], ['summary','Сводка'], ['tags','Теги'], ['settings','Настройки']
 ];
 
 const state = {
   wallets: [],
   whitelist: [],
   transfers: [],
+  tags: [],
   summaryMode: 'token',
-  filters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '' },
+  filters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '', walletTag: '' },
 };
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 6 });
@@ -111,6 +113,9 @@ async function setTab(tab){
   }
   if (tab === 'summary') {
     await loadSummary();
+  }
+  if (tab === 'tags') {
+    renderTagsAdmin();
   }
 }
 
@@ -245,6 +250,7 @@ function buildQueryFromFilters(filters) {
   if (filters.direction) q.set('direction', filters.direction);
   if (filters.tokenContract) q.set('tokenContract', filters.tokenContract);
   if (filters.walletAddress) q.set('walletAddress', filters.walletAddress);
+  if (filters.walletTag) q.set('walletTag', filters.walletTag);
   return q.toString();
 }
 
@@ -262,6 +268,7 @@ function renderTransfers(){
       <input id="t-start" type="date" value="${state.filters.start}" /><input id="t-end" type="date" value="${state.filters.end}" />
       <select id="t-direction"><option value="" ${state.filters.direction === '' ? 'selected' : ''}>Все направления</option><option value="incoming" ${state.filters.direction === 'incoming' ? 'selected' : ''}>Incoming</option><option value="outgoing" ${state.filters.direction === 'outgoing' ? 'selected' : ''}>Outgoing</option></select>
       <select id="t-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.filters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
+      <select id="t-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.filters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
       <input id="t-wallet" list="wallet-options-transfers" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" value="${state.filters.walletAddress}" />
       ${walletOptionsDatalist('wallet-options-transfers')}
       <button id="t-apply">Применить</button>
@@ -277,6 +284,7 @@ function renderTransfers(){
   const tEnd = document.getElementById('t-end');
   const tDirection = document.getElementById('t-direction');
   const tToken = document.getElementById('t-token');
+  const tTag = document.getElementById('t-tag');
   const tWallet = document.getElementById('t-wallet');
 
   const syncTransferFiltersFromUi = () => {
@@ -284,10 +292,11 @@ function renderTransfers(){
     state.filters.end = tEnd.value || '';
     state.filters.direction = tDirection.value || '';
     state.filters.tokenContract = tToken.value || '';
+    state.filters.walletTag = tTag.value || '';
     state.filters.walletAddress = tWallet.value || '';
   };
 
-  [tStart, tEnd, tDirection, tToken, tWallet].forEach((el) => {
+  [tStart, tEnd, tDirection, tToken, tTag, tWallet].forEach((el) => {
     el.addEventListener('change', syncTransferFiltersFromUi);
     el.addEventListener('input', syncTransferFiltersFromUi);
   });
@@ -327,6 +336,7 @@ function renderSummary(summaryRows = []){
       <input id="s-start" type="date" value="${state.filters.start}" /><input id="s-end" type="date" value="${state.filters.end}" />
       <select id="s-direction"><option value="" ${state.filters.direction === '' ? 'selected' : ''}>Все направления</option><option value="incoming" ${state.filters.direction === 'incoming' ? 'selected' : ''}>Incoming</option><option value="outgoing" ${state.filters.direction === 'outgoing' ? 'selected' : ''}>Outgoing</option></select>
       <select id="s-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.filters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
+      <select id="s-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.filters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
       <input id="s-wallet" list="wallet-options-summary" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" value="${state.filters.walletAddress}" />
       ${walletOptionsDatalist('wallet-options-summary')}
       <button id="s-apply">Применить</button>
@@ -341,6 +351,7 @@ function renderSummary(summaryRows = []){
   const sEnd = document.getElementById('s-end');
   const sDirection = document.getElementById('s-direction');
   const sToken = document.getElementById('s-token');
+  const sTag = document.getElementById('s-tag');
   const sWallet = document.getElementById('s-wallet');
 
   const syncSummaryFiltersFromUi = () => {
@@ -348,10 +359,11 @@ function renderSummary(summaryRows = []){
     state.filters.end = sEnd.value || '';
     state.filters.direction = sDirection.value || '';
     state.filters.tokenContract = sToken.value || '';
+    state.filters.walletTag = sTag.value || '';
     state.filters.walletAddress = sWallet.value || '';
   };
 
-  [sStart, sEnd, sDirection, sToken, sWallet].forEach((el) => {
+  [sStart, sEnd, sDirection, sToken, sTag, sWallet].forEach((el) => {
     el.addEventListener('change', syncSummaryFiltersFromUi);
     el.addEventListener('input', syncSummaryFiltersFromUi);
   });
@@ -365,6 +377,53 @@ function renderSummary(summaryRows = []){
   document.getElementById('s-mode-wallet').onclick = async () => { state.summaryMode = 'wallet'; await loadSummary(); };
 }
 
+function renderTagsAdmin(){
+  const untagged = state.wallets.filter(w => !(w.tags || []).length);
+  document.getElementById('view-tags').innerHTML = `
+    <div class="card"><h2>Администрирование тегов</h2><div class="muted">Назначай один тег сразу нескольким кошелькам</div></div>
+    <div class="card"><div class="row">
+      <input id="tag-name" placeholder="Название тега (например company-a)" style="min-width:260px" />
+      <button id="tag-assign" class="primary">Назначить выбранным кошелькам</button>
+      <span id="tag-note" class="note"></span>
+    </div></div>
+    <div class="card"><h3>Кошельки без тегов</h3>
+      <div class="muted">${untagged.length ? '' : 'Нет кошельков без тегов'}</div>
+      <ul>${untagged.map(w => `<li>${w.address}</li>`).join('')}</ul>
+    </div>
+    <div class="card"><h3>Список тегов</h3>
+      <table><thead><tr><th>Тег</th><th>Кол-во кошельков</th></tr></thead>
+      <tbody>${state.tags.map(t => `<tr><td>${t.tag}</td><td>${t.walletCount}</td></tr>`).join('')}</tbody></table>
+    </div>
+    <div class="card"><h3>Выбери кошельки для назначения тега</h3>
+      <table><thead><tr><th></th><th>Address</th><th>Label</th><th>Текущие теги</th></tr></thead>
+      <tbody>${state.wallets.map(w => `<tr><td><input type="checkbox" data-wallet-check="${w.id}" /></td><td>${w.address}</td><td>${w.label || ''}</td><td>${(w.tags || []).map(t => t.tag).join(', ')}</td></tr>`).join('')}</tbody></table>
+    </div>`;
+
+  document.getElementById('tag-assign').onclick = async () => {
+    const tag = document.getElementById('tag-name').value.trim();
+    const walletIds = Array.from(document.querySelectorAll('[data-wallet-check]:checked')).map(el => el.dataset.walletCheck);
+    const note = document.getElementById('tag-note');
+    if (!tag) {
+      note.textContent = 'Укажи название тега';
+      return;
+    }
+    if (!walletIds.length) {
+      note.textContent = 'Выбери хотя бы один кошелёк';
+      return;
+    }
+    try {
+      const r = await api('/api/tags/assign', { method: 'POST', body: JSON.stringify({ tag, walletIds }) });
+      note.textContent = `Готово: назначено ${r.assigned}/${r.wallets}`;
+      await refreshAll();
+      renderTagsAdmin();
+      renderTransfers();
+      await loadSummary();
+    } catch (e) {
+      note.textContent = 'Ошибка: ' + e.message;
+    }
+  };
+}
+
 function renderSettings(){
   document.getElementById('view-settings').innerHTML = `
     <div class="card"><h2>Настройки</h2><div class="muted">Автообновление + роли</div></div>
@@ -375,7 +434,9 @@ function renderSettings(){
 async function refreshAll() {
   state.wallets = await api('/api/wallets');
   state.whitelist = await api('/api/whitelist');
-  state.transfers = await api('/api/transfers');
+  state.tags = await api('/api/tags');
+  const q = buildQueryFromFilters(state.filters);
+  state.transfers = await api('/api/transfers' + (q ? '?' + q : ''));
 }
 
 (async function init() {
