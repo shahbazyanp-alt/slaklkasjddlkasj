@@ -518,19 +518,53 @@ async function loadBalancesEtherscan() {
   renderBalancesEtherscan();
 }
 
+function renderBalanceSyncLogs(logEl, logs = []) {
+  if (!logEl) return;
+  logEl.innerHTML = (logs || []).slice(-80).map((l) => {
+    const cls = l.level === 'warn' ? 'warn' : l.level === 'error' ? 'error' : '';
+    const time = new Date(l.ts).toLocaleTimeString('ru-RU');
+    return `<div class="${cls}">[${time}] ${l.message}</div>`;
+  }).join('') || '<div class="muted">Лог пуст</div>';
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function runBalanceSyncWithProgress(noteEl, fillEl, logEl) {
+  await api('/api/balances/etherscan/sync', {
+    method: 'POST',
+    body: JSON.stringify({ tokenContract: state.balanceFilters.tokenContract, walletTag: state.balanceFilters.walletTag }),
+  });
+
+  while (true) {
+    const s = await api('/api/balances/etherscan/status');
+    fillEl.style.width = `${s.progress || 0}%`;
+    noteEl.textContent = s.running
+      ? `Синк балансов: ${s.processed}/${s.total}`
+      : (s.error ? `Ошибка: ${s.error}` : `Готово: ${s.processed}/${s.total}`);
+    renderBalanceSyncLogs(logEl, s.logs || []);
+    if (!s.running) break;
+    await new Promise((r) => setTimeout(r, 1200));
+  }
+}
+
 function renderBalancesEtherscan() {
+  const rows = state.balancesEtherscan.length ? state.balancesEtherscan : state.balances;
   document.getElementById('view-balances-etherscan').innerHTML = `
-    <div class="card"><h2>balanceEtherscan</h2><div class="muted">Текущий баланс, полученный напрямую из Etherscan API.</div></div>
+    <div class="card"><h2>balanceEtherscan</h2><div class="muted">Текущий баланс из Etherscan API. Если синк ещё не запускали — показываем данные из ledger как базовый список.</div></div>
     <div class="card"><div class="row">
       <select id="be-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.balanceFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
       <select id="be-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.balanceFilters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
       <button id="be-sort-toggle">Сортировка: ${state.balanceSort === 'asc' ? 'по возрастанию' : 'по убыванию'}</button>
       <button id="be-apply">Применить</button>
       <button id="be-refresh">Обновить</button>
-    </div></div>
+      <button id="be-sync" class="primary">Запросить балансы из Etherscan</button>
+      <div class="progress-wrap"><div class="progress-bar"><div id="be-sync-fill" class="progress-fill"></div></div></div>
+      <span id="be-sync-note" class="note"></span>
+    </div>
+    <div style="margin-top:10px" class="sync-log" id="be-sync-log"></div>
+    </div>
     <div class="card"><table>
       <thead><tr><th>Номер кошелька</th><th>Кошелёк</th><th>Токен</th><th>Баланс</th></tr></thead>
-      <tbody>${state.balancesEtherscan.map(r => `<tr><td>${r.walletNumber || ''}</td><td>${r.walletAddress}</td><td>${r.tokenName || ''}</td><td>${fmt(r.balance)}</td></tr>`).join('')}</tbody>
+      <tbody>${rows.map(r => `<tr><td>${r.walletNumber || ''}</td><td>${r.walletAddress}</td><td>${r.tokenName || ''}</td><td>${fmt(r.balance)}</td></tr>`).join('')}</tbody>
     </table></div>`;
 
   document.getElementById('be-sort-toggle').onclick = async () => {
@@ -543,6 +577,20 @@ function renderBalancesEtherscan() {
     await loadBalancesEtherscan();
   };
   document.getElementById('be-refresh').onclick = loadBalancesEtherscan;
+  document.getElementById('be-sync').onclick = async () => {
+    const note = document.getElementById('be-sync-note');
+    const fill = document.getElementById('be-sync-fill');
+    const log = document.getElementById('be-sync-log');
+    fill.style.width = '0%';
+    note.textContent = 'Запуск...';
+    renderBalanceSyncLogs(log, []);
+    try {
+      await runBalanceSyncWithProgress(note, fill, log);
+      await loadBalancesEtherscan();
+    } catch (e) {
+      note.textContent = 'Ошибка: ' + e.message;
+    }
+  };
 }
 
 function renderTagsAdmin(){

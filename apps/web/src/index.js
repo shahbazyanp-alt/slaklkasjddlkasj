@@ -18,6 +18,23 @@ const syncState = {
   logs: [],
 };
 
+const balanceSyncState = {
+  running: false,
+  total: 0,
+  processed: 0,
+  startedAt: null,
+  finishedAt: null,
+  error: null,
+  logs: [],
+};
+
+let etherscanBalancesCache = [];
+
+function pushBalanceLog(message, level = 'info') {
+  balanceSyncState.logs.push({ ts: new Date().toISOString(), level, message });
+  if (balanceSyncState.logs.length > 300) balanceSyncState.logs.splice(0, balanceSyncState.logs.length - 300);
+}
+
 function pushSyncLog(message, level = 'info') {
   syncState.logs.push({ ts: new Date().toISOString(), level, message });
   if (syncState.logs.length > 300) syncState.logs.splice(0, syncState.logs.length - 300);
@@ -56,6 +73,80 @@ const ETHERSCAN_RPS = Math.max(1, Number(process.env.ETHERSCAN_RPS || 5));
 const ETHERSCAN_MIN_INTERVAL_MS = Math.ceil(1000 / ETHERSCAN_RPS);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function runBalancesEtherscanSync({ tokenContract, walletTag } = {}) {
+  const apiKey = process.env.ETHERSCAN_API_KEY;
+  if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not set');
+  const client = makeEtherscanClient({ apiKey });
+
+  const wallets = await prisma.wallet.findMany({
+    where: walletTag ? { tags: { some: { tag: walletTag } } } : undefined,
+    orderBy: { createdAt: 'asc' },
+  });
+  const whitelist = await prisma.tokenWhitelist.findMany({
+    where: { chain: 'ethereum', ...(tokenContract ? { contractAddress: tokenContract } : {}) },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  balanceSyncState.running = true;
+  balanceSyncState.startedAt = new Date().toISOString();
+  balanceSyncState.finishedAt = null;
+  balanceSyncState.error = null;
+  balanceSyncState.logs = [];
+  balanceSyncState.processed = 0;
+  balanceSyncState.total = wallets.length * whitelist.length;
+  pushBalanceLog(`Balance sync started. Tasks: ${balanceSyncState.total}`);
+
+  const rows = [];
+  let lastCallAt = 0;
+  try {
+    for (const w of wallets) {
+      for (const t of whitelist) {
+        const now = Date.now();
+        const wait = Math.max(0, ETHERSCAN_MIN_INTERVAL_MS - (now - lastCallAt));
+        if (wait > 0) await sleep(wait);
+
+        let raw;
+        for (let attempt = 1; attempt <= 5; attempt += 1) {
+          try {
+            raw = await client.fetchTokenBalance(w.address, t.contractAddress);
+            break;
+          } catch (e) {
+            const msg = String(e?.message || e).toLowerCase();
+            const rateLimited = msg.includes('rate limit') || msg.includes('max calls per sec');
+            if (!rateLimited || attempt === 5) throw e;
+            pushBalanceLog(`Rate limited ${w.address} ${t.tokenName}, retry ${attempt}/5`, 'warn');
+            await sleep(attempt * 500);
+          }
+        }
+        lastCallAt = Date.now();
+
+        const balance = Number(raw || '0') / 1e6; // TODO: per-token decimals
+        rows.push({
+          walletAddress: w.address,
+          walletNumber: w.walletNumber,
+          tokenContract: t.contractAddress,
+          tokenName: t.tokenName,
+          balance,
+        });
+
+        balanceSyncState.processed += 1;
+      }
+      pushBalanceLog(`Wallet done: ${w.address} (${balanceSyncState.processed}/${balanceSyncState.total})`);
+    }
+
+    etherscanBalancesCache = rows;
+    balanceSyncState.finishedAt = new Date().toISOString();
+    pushBalanceLog(`Balance sync finished. Rows: ${rows.length}`);
+  } catch (error) {
+    balanceSyncState.error = String(error?.message || error);
+    balanceSyncState.finishedAt = new Date().toISOString();
+    pushBalanceLog(`Balance sync failed: ${balanceSyncState.error}`, 'error');
+    throw error;
+  } finally {
+    balanceSyncState.running = false;
+  }
+}
 
 async function runManualSync() {
   const apiKey = process.env.ETHERSCAN_API_KEY;
@@ -411,54 +502,31 @@ async function handleApi(req, res) {
   }
 
   // balances (etherscan)
+  if (req.method === 'POST' && url.pathname === '/api/balances/etherscan/sync') {
+    if (balanceSyncState.running) return sendJson(res, 200, { ok: true, started: false, message: 'already running' });
+    const body = await readJsonBody(req);
+    runBalancesEtherscanSync({ tokenContract: body.tokenContract || '', walletTag: body.walletTag || '' }).catch((e) => {
+      console.error('balance sync failed', e);
+    });
+    return sendJson(res, 202, { ok: true, started: true });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/balances/etherscan/status') {
+    const progress = balanceSyncState.total > 0 ? Math.round((balanceSyncState.processed / balanceSyncState.total) * 100) : 0;
+    return sendJson(res, 200, { ...balanceSyncState, progress });
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/balances/etherscan') {
-    const apiKey = process.env.ETHERSCAN_API_KEY;
-    if (!apiKey) return sendJson(res, 400, { error: 'ETHERSCAN_API_KEY is not set' });
+    const tokenContract = (url.searchParams.get('tokenContract') || '').toLowerCase();
+    const walletTag = url.searchParams.get('walletTag') || '';
 
-    const tokenContract = url.searchParams.get('tokenContract');
-    const walletTag = url.searchParams.get('walletTag');
+    let rows = etherscanBalancesCache.slice();
+    if (tokenContract) rows = rows.filter((r) => (r.tokenContract || '').toLowerCase() === tokenContract);
 
-    const client = makeEtherscanClient({ apiKey });
-    const wallets = await prisma.wallet.findMany({
-      where: walletTag ? { tags: { some: { tag: walletTag } } } : undefined,
-      orderBy: { createdAt: 'asc' },
-    });
-    const whitelist = await prisma.tokenWhitelist.findMany({
-      where: { chain: 'ethereum', ...(tokenContract ? { contractAddress: tokenContract } : {}) },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    const rows = [];
-    let lastCallAt = 0;
-    for (const w of wallets) {
-      for (const t of whitelist) {
-        const now = Date.now();
-        const wait = Math.max(0, ETHERSCAN_MIN_INTERVAL_MS - (now - lastCallAt));
-        if (wait > 0) await sleep(wait);
-
-        let raw;
-        for (let attempt = 1; attempt <= 5; attempt += 1) {
-          try {
-            raw = await client.fetchTokenBalance(w.address, t.contractAddress);
-            break;
-          } catch (e) {
-            const msg = String(e?.message || e).toLowerCase();
-            const rateLimited = msg.includes('rate limit') || msg.includes('max calls per sec');
-            if (!rateLimited || attempt === 5) throw e;
-            await sleep(attempt * 500);
-          }
-        }
-        lastCallAt = Date.now();
-
-        const balance = Number(raw || '0') / 1e6; // USDT/USDC now; expand with token decimals later
-        rows.push({
-          walletAddress: w.address,
-          walletNumber: w.walletNumber,
-          tokenContract: t.contractAddress,
-          tokenName: t.tokenName,
-          balance,
-        });
-      }
+    if (walletTag) {
+      const wallets = await prisma.wallet.findMany({ where: { tags: { some: { tag: walletTag } } }, select: { address: true } });
+      const set = new Set(wallets.map((w) => w.address.toLowerCase()));
+      rows = rows.filter((r) => set.has((r.walletAddress || '').toLowerCase()));
     }
 
     rows.sort((a, b) => a.balance - b.balance);
