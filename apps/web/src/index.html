@@ -134,7 +134,11 @@ function renderTransfers(){
       <input type="date" /><input type="date" />
       <select><option>Все направления</option><option>Incoming</option><option>Outgoing</option></select>
       <select><option>Все токены</option><option>USDT</option><option>USDC</option></select>
-      <select><option>Все кошельки</option><option>0xAa...11</option><option>0xBb...22</option></select>
+      <input list="wallet-options-transfers" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" />
+      <datalist id="wallet-options-transfers">
+        <option value="0xAa...11">Main wallet</option>
+        <option value="0xBb...22">Reserve</option>
+      </datalist>
       <button>Применить</button>
       <button>Обновить</button>
       <button class="primary">Экспорт CSV</button>
@@ -151,7 +155,11 @@ function renderSummary(){
       <input type="date" /><input type="date" />
       <select><option>Все направления</option><option>Incoming</option><option>Outgoing</option></select>
       <select><option>Все токены</option><option>USDT</option><option>USDC</option></select>
-      <select><option>Все кошельки</option><option>0xAa...11</option><option>0xBb...22</option></select>
+      <input list="wallet-options-summary" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" />
+      <datalist id="wallet-options-summary">
+        <option value="0xAa...11">Main wallet</option>
+        <option value="0xBb...22">Reserve</option>
+      </datalist>
       <button>Применить</button>
       <button>Обновить</button>
       <button id="summary-toggle-token" class="primary">По токенам</button>
