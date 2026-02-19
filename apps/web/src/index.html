@@ -488,8 +488,8 @@ function renderBalances() {
       <button id="b-refresh">Обновить</button>
     </div></div>
     <div class="card"><table>
-      <thead><tr><th>Кошелёк</th><th>Токен</th><th>Контракт</th><th>Баланс</th></tr></thead>
-      <tbody>${state.balances.map(r => `<tr><td>${r.walletAddress}</td><td>${r.tokenName || r.tokenSymbol || ''}</td><td>${r.tokenContract}</td><td>${fmt(r.balance)}</td></tr>`).join('')}</tbody>
+      <thead><tr><th>Номер кошелька</th><th>Кошелёк</th><th>Токен</th><th>Контракт</th><th>Баланс</th></tr></thead>
+      <tbody>${state.balances.map(r => `<tr><td>${r.walletNumber || ''}</td><td>${r.walletAddress}</td><td>${r.tokenName || r.tokenSymbol || ''}</td><td>${r.tokenContract}</td><td>${fmt(r.balance)}</td></tr>`).join('')}</tbody>
     </table></div>`;
 
   document.getElementById('b-sort-toggle').onclick = async () => {

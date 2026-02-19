@@ -392,6 +392,7 @@ async function handleApi(req, res) {
       const key = `${t.wallet.address}:${t.tokenContract.toLowerCase()}`;
       const prev = map.get(key) || {
         walletAddress: t.wallet.address,
+        walletNumber: t.wallet.walletNumber,
         tokenContract: t.tokenContract,
         tokenName: t.tokenName,
         tokenSymbol: t.tokenSymbol,
