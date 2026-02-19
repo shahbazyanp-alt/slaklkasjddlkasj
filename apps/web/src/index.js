@@ -355,6 +355,45 @@ async function handleApi(req, res) {
     return sendJson(res, 200, { ...syncState, progress });
   }
 
+  // balances
+  if (req.method === 'GET' && url.pathname === '/api/balances') {
+    const tokenContract = url.searchParams.get('tokenContract');
+    const walletTag = url.searchParams.get('walletTag');
+
+    const transfers = await prisma.erc20Transfer.findMany({
+      where: {
+        isConfirmed: true,
+        amountRaw: { not: '0' },
+        tokenContract: tokenContract || undefined,
+        wallet: walletTag ? { tags: { some: { tag: walletTag } } } : undefined,
+      },
+      include: { wallet: true },
+      orderBy: { blockTimestamp: 'desc' },
+      take: 50000,
+    });
+
+    const map = new Map();
+    for (const t of transfers) {
+      const key = `${t.wallet.address}:${t.tokenContract.toLowerCase()}`;
+      const prev = map.get(key) || {
+        walletAddress: t.wallet.address,
+        tokenContract: t.tokenContract,
+        tokenName: t.tokenName,
+        tokenSymbol: t.tokenSymbol,
+        balance: 0,
+      };
+      const amount = Number(t.amountNormalized || 0);
+      if (t.direction === 'incoming') prev.balance += amount;
+      if (t.direction === 'outgoing') prev.balance -= amount;
+      map.set(key, prev);
+    }
+
+    const rows = Array.from(map.values())
+      .map((r) => ({ ...r, balance: Math.abs(r.balance) < 1e-9 ? 0 : r.balance }))
+      .sort((a, b) => a.balance - b.balance);
+    return sendJson(res, 200, rows);
+  }
+
   // summary
   if (req.method === 'GET' && url.pathname === '/api/summary') {
     const mode = url.searchParams.get('mode') === 'wallet' ? 'wallet' : 'token';

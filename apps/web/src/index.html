@@ -51,6 +51,7 @@
       <section id="view-whitelist" class="view hidden"></section>
       <section id="view-transfers" class="view hidden"></section>
       <section id="view-summary" class="view hidden"></section>
+      <section id="view-balances" class="view hidden"></section>
       <section id="view-tags" class="view hidden"></section>
       <section id="view-settings" class="view hidden"></section>
     </main>
@@ -59,7 +60,7 @@
 <script>
 const tabs = [
   ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
-  ['transfers','Транзакции'], ['summary','Сводка'], ['tags','Теги'], ['settings','Настройки']
+  ['transfers','Транзакции'], ['summary','Сводка'], ['balances','Балансы'], ['tags','Теги'], ['settings','Настройки']
 ];
 
 const state = {
@@ -67,8 +68,10 @@ const state = {
   whitelist: [],
   transfers: [],
   tags: [],
+  balances: [],
   summaryMode: 'token',
   filters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '', walletTag: '', includeSpam: false },
+  balanceFilters: { tokenContract: '', walletTag: '' },
 };
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 6 });
@@ -128,6 +131,9 @@ async function setTab(tab){
   }
   if (tab === 'summary') {
     await loadSummary();
+  }
+  if (tab === 'balances') {
+    await loadBalances();
   }
   if (tab === 'tags') {
     renderTagsAdmin();
@@ -440,6 +446,36 @@ function renderSummary(summaryRows = []){
   document.getElementById('s-refresh').onclick = async () => { await refreshAll(); await loadSummary(); };
   document.getElementById('s-mode-token').onclick = async () => { state.summaryMode = 'token'; await loadSummary(); };
   document.getElementById('s-mode-wallet').onclick = async () => { state.summaryMode = 'wallet'; await loadSummary(); };
+}
+
+async function loadBalances() {
+  const q = new URLSearchParams();
+  if (state.balanceFilters.tokenContract) q.set('tokenContract', state.balanceFilters.tokenContract);
+  if (state.balanceFilters.walletTag) q.set('walletTag', state.balanceFilters.walletTag);
+  state.balances = await api('/api/balances' + (q.toString() ? `?${q.toString()}` : ''));
+  renderBalances();
+}
+
+function renderBalances() {
+  document.getElementById('view-balances').innerHTML = `
+    <div class="card"><h2>Балансы</h2><div class="muted">Баланс по выбранным токенам на кошельках из системы, сортировка от меньшего к большему.</div></div>
+    <div class="card"><div class="row">
+      <select id="b-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.balanceFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
+      <select id="b-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.balanceFilters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
+      <button id="b-apply">Применить</button>
+      <button id="b-refresh">Обновить</button>
+    </div></div>
+    <div class="card"><table>
+      <thead><tr><th>Кошелёк</th><th>Токен</th><th>Контракт</th><th>Баланс</th></tr></thead>
+      <tbody>${state.balances.map(r => `<tr><td>${r.walletAddress}</td><td>${r.tokenName || r.tokenSymbol || ''}</td><td>${r.tokenContract}</td><td>${fmt(r.balance)}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+
+  document.getElementById('b-apply').onclick = async () => {
+    state.balanceFilters.tokenContract = document.getElementById('b-token').value || '';
+    state.balanceFilters.walletTag = document.getElementById('b-tag').value || '';
+    await loadBalances();
+  };
+  document.getElementById('b-refresh').onclick = loadBalances;
 }
 
 function renderTagsAdmin(){
