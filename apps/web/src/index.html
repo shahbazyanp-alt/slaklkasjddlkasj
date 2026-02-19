@@ -110,7 +110,7 @@ function renderWallets(){
       </div>
     </div>
     <div class="card">
-      <table><thead><tr><th>Address</th><th>Label</th><th>Tags</th><th></th></tr></thead>
+      <table><thead><tr><th>Address</th><th>Label</th><th>Тег кошелька</th><th></th></tr></thead>
       <tbody>${wallets.map(w=>`<tr><td>${w.address}</td><td>${w.label}</td><td>${w.tags.join(', ')}</td><td><button>Удалить</button></td></tr>`).join('')}</tbody></table>
     </div>`;
 }
@@ -146,17 +146,44 @@ function renderTransfers(){
 
 function renderSummary(){
   document.getElementById('view-summary').innerHTML = `
-    <div class="card"><h2>Сводка</h2><div class="muted">Итоги по токенам и по кошелькам</div></div>
-    <div class="grid2">
-      <div class="card"><h3>По токенам</h3>
-        <table><thead><tr><th>Токен</th><th>Вход</th><th>Выход</th></tr></thead>
-        <tbody><tr><td>USDT</td><td class="in">1450.00</td><td class="out">0.00</td></tr><tr><td>USDC</td><td class="in">0.00</td><td class="out">500.00</td></tr></tbody></table>
-      </div>
-      <div class="card"><h3>По кошелькам</h3>
-        <table><thead><tr><th>Кошелёк</th><th>Вход</th><th>Выход</th></tr></thead>
-        <tbody><tr><td>0xAa...11</td><td class="in">1450.00</td><td class="out">0.00</td></tr><tr><td>0xBb...22</td><td class="in">0.00</td><td class="out">500.00</td></tr></tbody></table>
-      </div>
+    <div class="card"><h2>Сводка</h2><div class="muted">Итоги по токенам или по кошелькам (toggle)</div></div>
+    <div class="card"><div class="row">
+      <input type="date" /><input type="date" />
+      <select><option>Все направления</option><option>Incoming</option><option>Outgoing</option></select>
+      <select><option>Все токены</option><option>USDT</option><option>USDC</option></select>
+      <select><option>Все кошельки</option><option>0xAa...11</option><option>0xBb...22</option></select>
+      <button>Применить</button>
+      <button>Обновить</button>
+      <button id="summary-toggle-token" class="primary">По токенам</button>
+      <button id="summary-toggle-wallet">По кошелькам</button>
+    </div></div>
+    <div class="card" id="summary-token-table"><h3>По токенам</h3>
+      <table><thead><tr><th>Токен</th><th>Вход</th><th>Выход</th></tr></thead>
+      <tbody><tr><td>USDT</td><td class="in">1450.00</td><td class="out">0.00</td></tr><tr><td>USDC</td><td class="in">0.00</td><td class="out">500.00</td></tr></tbody></table>
+    </div>
+    <div class="card hidden" id="summary-wallet-table"><h3>По кошелькам</h3>
+      <table><thead><tr><th>Кошелёк</th><th>Тег</th><th>Вход</th><th>Выход</th></tr></thead>
+      <tbody><tr><td>0xAa...11</td><td>client-a, hot</td><td class="in">1450.00</td><td class="out">0.00</td></tr><tr><td>0xBb...22</td><td>reserve</td><td class="in">0.00</td><td class="out">500.00</td></tr></tbody></table>
     </div>`;
+
+  const tokenBtn = document.getElementById('summary-toggle-token');
+  const walletBtn = document.getElementById('summary-toggle-wallet');
+  const tokenTable = document.getElementById('summary-token-table');
+  const walletTable = document.getElementById('summary-wallet-table');
+
+  tokenBtn.onclick = () => {
+    tokenTable.classList.remove('hidden');
+    walletTable.classList.add('hidden');
+    tokenBtn.classList.add('primary');
+    walletBtn.classList.remove('primary');
+  };
+
+  walletBtn.onclick = () => {
+    walletTable.classList.remove('hidden');
+    tokenTable.classList.add('hidden');
+    walletBtn.classList.add('primary');
+    tokenBtn.classList.remove('primary');
+  };
 }
 
 function renderSettings(){
