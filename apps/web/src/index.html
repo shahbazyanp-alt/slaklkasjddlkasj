@@ -72,6 +72,7 @@ const state = {
   summaryMode: 'token',
   filters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '', walletTag: '', includeSpam: false },
   balanceFilters: { tokenContract: '', walletTag: '' },
+  balanceSort: 'asc',
 };
 
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 6 });
@@ -453,6 +454,7 @@ async function loadBalances() {
   if (state.balanceFilters.tokenContract) q.set('tokenContract', state.balanceFilters.tokenContract);
   if (state.balanceFilters.walletTag) q.set('walletTag', state.balanceFilters.walletTag);
   state.balances = await api('/api/balances' + (q.toString() ? `?${q.toString()}` : ''));
+  state.balances.sort((a, b) => state.balanceSort === 'asc' ? (a.balance - b.balance) : (b.balance - a.balance));
   renderBalances();
 }
 
@@ -462,6 +464,7 @@ function renderBalances() {
     <div class="card"><div class="row">
       <select id="b-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.balanceFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
       <select id="b-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.balanceFilters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
+      <button id="b-sort-toggle">Сортировка: ${state.balanceSort === 'asc' ? 'по возрастанию' : 'по убыванию'}</button>
       <button id="b-apply">Применить</button>
       <button id="b-refresh">Обновить</button>
     </div></div>
@@ -470,6 +473,10 @@ function renderBalances() {
       <tbody>${state.balances.map(r => `<tr><td>${r.walletAddress}</td><td>${r.tokenName || r.tokenSymbol || ''}</td><td>${r.tokenContract}</td><td>${fmt(r.balance)}</td></tr>`).join('')}</tbody>
     </table></div>`;
 
+  document.getElementById('b-sort-toggle').onclick = async () => {
+    state.balanceSort = state.balanceSort === 'asc' ? 'desc' : 'asc';
+    await loadBalances();
+  };
   document.getElementById('b-apply').onclick = async () => {
     state.balanceFilters.tokenContract = document.getElementById('b-token').value || '';
     state.balanceFilters.walletTag = document.getElementById('b-tag').value || '';
