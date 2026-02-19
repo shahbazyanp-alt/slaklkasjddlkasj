@@ -195,6 +195,7 @@ async function handleApi(req, res) {
     const body = await readJsonBody(req);
     const address = String(body.address || '').trim();
     const label = body.label ? String(body.label).trim() : null;
+    const walletNumber = body.walletNumber ? String(body.walletNumber).trim() : null;
     const tags = Array.isArray(body.tags) ? body.tags.map((t) => String(t).trim()).filter(Boolean) : [];
     if (!address) return sendJson(res, 400, { error: 'address is required' });
 
@@ -202,6 +203,7 @@ async function handleApi(req, res) {
       data: {
         address,
         label,
+        walletNumber,
         tags: tags.length ? { create: tags.map((tag) => ({ tag })) } : undefined,
       },
       include: { tags: true },
@@ -214,6 +216,19 @@ async function handleApi(req, res) {
     if (!id) return sendJson(res, 400, { error: 'id is required' });
     await prisma.wallet.delete({ where: { id } });
     return sendJson(res, 200, { ok: true });
+  }
+
+  if (req.method === 'PUT' && url.pathname === '/api/wallets/number') {
+    const body = await readJsonBody(req);
+    const id = String(body.id || '').trim();
+    const walletNumber = body.walletNumber ? String(body.walletNumber).trim() : null;
+    if (!id) return sendJson(res, 400, { error: 'id is required' });
+    const updated = await prisma.wallet.update({
+      where: { id },
+      data: { walletNumber },
+      include: { tags: true },
+    });
+    return sendJson(res, 200, updated);
   }
 
   if (req.method === 'POST' && url.pathname === '/api/wallets/bulk') {

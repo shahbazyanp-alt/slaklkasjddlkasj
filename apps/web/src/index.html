@@ -201,6 +201,7 @@ function renderWallets(){
     <div class="card"><div class="row">
       <input id="wallet-address" placeholder="0x... address" style="min-width:280px" />
       <input id="wallet-label" placeholder="Label" />
+      <input id="wallet-number" placeholder="Номер кошелька" style="min-width:150px" />
       <input id="wallet-tags" placeholder="tags через запятую" style="min-width:220px" />
       <button id="add-wallet" class="primary">Добавить</button>
       <span class="note" id="wallet-note"></span>
@@ -217,17 +218,18 @@ function renderWallets(){
       </div>
     </div>
     <div class="card">
-      <table><thead><tr><th>Address</th><th>Label</th><th>Тег кошелька</th><th></th></tr></thead>
-      <tbody>${state.wallets.map(w=>`<tr><td>${w.address}</td><td>${w.label || ''}</td><td>${(w.tags || []).map(t=>t.tag).join(', ')}</td><td><button data-delete-wallet="${w.id}">Удалить</button></td></tr>`).join('')}</tbody></table>
+      <table><thead><tr><th>Address</th><th>Номер кошелька</th><th>Label</th><th>Тег кошелька</th><th></th></tr></thead>
+      <tbody>${state.wallets.map(w=>`<tr><td>${w.address}</td><td><input data-wallet-number-input="${w.id}" value="${w.walletNumber || ''}" placeholder="номер" style="min-width:120px"/> <button data-save-wallet-number="${w.id}">Сохранить</button></td><td>${w.label || ''}</td><td>${(w.tags || []).map(t=>t.tag).join(', ')}</td><td><button data-delete-wallet="${w.id}">Удалить</button></td></tr>`).join('')}</tbody></table>
     </div>`;
 
   document.getElementById('add-wallet').onclick = async () => {
     const note = document.getElementById('wallet-note');
     const address = document.getElementById('wallet-address').value.trim();
     const label = document.getElementById('wallet-label').value.trim();
+    const walletNumber = document.getElementById('wallet-number').value.trim();
     const tags = document.getElementById('wallet-tags').value.split(',').map(s => s.trim()).filter(Boolean);
     try {
-      await api('/api/wallets', { method: 'POST', body: JSON.stringify({ address, label, tags }) });
+      await api('/api/wallets', { method: 'POST', body: JSON.stringify({ address, label, walletNumber, tags }) });
       note.textContent = 'Добавлено';
       await refreshAll();
       renderWallets();
@@ -236,6 +238,23 @@ function renderWallets(){
       note.textContent = 'Ошибка: ' + e.message;
     }
   };
+
+  document.querySelectorAll('[data-save-wallet-number]').forEach((btn) => {
+    btn.onclick = async () => {
+      const note = document.getElementById('wallet-note');
+      const id = btn.dataset.saveWalletNumber;
+      const input = document.querySelector(`[data-wallet-number-input="${id}"]`);
+      const walletNumber = input?.value?.trim() || '';
+      try {
+        await api('/api/wallets/number', { method: 'PUT', body: JSON.stringify({ id, walletNumber }) });
+        note.textContent = 'Номер кошелька сохранён';
+        await refreshAll();
+        renderWallets();
+      } catch (e) {
+        note.textContent = 'Ошибка: ' + e.message;
+      }
+    };
+  });
 
   document.getElementById('add-wallet-bulk').onclick = async () => {
     const note = document.getElementById('wallet-bulk-note');

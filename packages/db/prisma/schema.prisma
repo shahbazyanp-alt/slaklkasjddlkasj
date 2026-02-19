@@ -27,14 +27,15 @@ model User {
 }
 
 model Wallet {
-  id        String      @id @default(cuid())
-  address   String      @unique
-  label     String?
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-  tags      WalletTag[]
-  transfers Erc20Transfer[]
-  syncState WalletSyncState?
+  id           String      @id @default(cuid())
+  address      String      @unique
+  walletNumber String?     @unique
+  label        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  tags         WalletTag[]
+  transfers    Erc20Transfer[]
+  syncState    WalletSyncState?
 }
 
 model WalletTag {
