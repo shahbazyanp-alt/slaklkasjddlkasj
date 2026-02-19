@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  read_only
+}
+
+enum TransferDirection {
+  incoming
+  outgoing
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         UserRole
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Wallet {
+  id        String      @id @default(cuid())
+  address   String      @unique
+  label     String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  tags      WalletTag[]
+  transfers Erc20Transfer[]
+  syncState WalletSyncState?
+}
+
+model WalletTag {
+  id        String   @id @default(cuid())
+  walletId  String
+  tag       String
+  wallet    Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([walletId])
+  @@unique([walletId, tag])
+}
+
+model TokenWhitelist {
+  id              String   @id @default(cuid())
+  chain           String   @default("ethereum")
+  contractAddress String   @unique
+  tokenName       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Erc20Transfer {
+  id                 String            @id @default(cuid())
+  walletId           String
+  chain              String            @default("ethereum")
+  txHash             String
+  logIndex           Int
+  blockNumber        BigInt
+  blockTimestamp     DateTime
+  direction          TransferDirection
+  tokenContract      String
+  tokenName          String
+  tokenSymbol        String?
+  tokenDecimals      Int?
+  amountRaw          String
+  amountNormalized   Decimal?          @db.Decimal(38, 18)
+  fromAddress        String
+  toAddress          String
+  confirmations      Int?
+  isConfirmed        Boolean           @default(true)
+  wallet             Wallet            @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  createdAt          DateTime          @default(now())
+
+  @@index([walletId, blockTimestamp])
+  @@index([tokenContract, blockTimestamp])
+  @@index([direction, blockTimestamp])
+  @@unique([txHash, logIndex])
+}
+
+model WalletSyncState {
+  walletId             String   @id
+  lastSyncedAt         DateTime?
+  lastSyncedBlock      BigInt?
+  backfillCompleted    Boolean  @default(false)
+  cursorPage           Int?
+  cursorOffset         Int?
+  wallet               Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  updatedAt            DateTime @updatedAt
+}

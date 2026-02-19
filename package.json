@@ -1,9 +1,16 @@
 {
-  "name": "sports-news-agent",
+  "name": "crypto-payment-tracker",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "start": "node src/index.js"
+    "dev:web": "npm --workspace @tracker/web run dev",
+    "dev:worker": "npm --workspace @tracker/worker run dev",
+    "db:generate": "npm --workspace @tracker/db run generate",
+    "db:migrate": "npm --workspace @tracker/db run migrate"
   }
 }

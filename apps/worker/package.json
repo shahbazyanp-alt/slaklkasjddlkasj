@@ -1,0 +1,8 @@
+{
+  "name": "@tracker/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node src/index.js"
+  }
+}

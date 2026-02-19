@@ -1,0 +1,25 @@
+# Confirmed requirements (MVP)
+
+- Network: Ethereum only
+- Assets: ERC-20 only
+- Source: Etherscan API
+- Directions: incoming + outgoing
+- History: full historical load per wallet
+- Filters: by date range + direction + amount + wallet + token
+- Whitelist: contract address + token name
+- Wallet input: manual copy/paste
+- Scale target: 200+ wallets
+- Dedup key: txHash + logIndex
+- Status: confirmed transactions only
+- Wallet tags: required
+- Summary: by tokens and by wallets
+- Export: CSV/Excel
+- Refresh modes:
+  - manual button
+  - auto refresh with configurable interval (minute/hour/day)
+- Auth: required
+- Roles:
+  - admin
+  - read_only
+- Notifications: not in MVP (reminder recorded for post-MVP)
+- Amount display: token units only (no USD conversion)
