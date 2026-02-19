@@ -1,0 +1,7 @@
+feed:
+  type: polling
+  interval_sec: 30
+
+output:
+  channel: telegram
+  language: ru
