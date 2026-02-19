@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Crypto Tracker MVP Draft</title>
+  <title>Crypto Tracker MVP</title>
   <style>
     :root { --bg:#0b1020; --panel:#121a30; --muted:#8ea0c0; --text:#e9efff; --accent:#5aa9ff; --ok:#3ddc97; --danger:#ff6b6b; }
     * { box-sizing: border-box; font-family: Inter, system-ui, sans-serif; }
@@ -17,6 +17,7 @@
     .card { background:var(--panel); border:1px solid #233052; border-radius:14px; padding:14px; margin-bottom:14px; }
     .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     input, select, button { border-radius:10px; border:1px solid #2a3a64; background:#0f1730; color:var(--text); padding:8px 10px; }
+    button { cursor:pointer; }
     button.primary { background:var(--accent); color:#04122b; border-color:transparent; font-weight:700; }
     table { width:100%; border-collapse:collapse; font-size:14px; }
     th, td { border-bottom:1px solid #233052; padding:10px 8px; text-align:left; }
@@ -28,12 +29,13 @@
     .grid2 { display:grid; grid-template-columns:repeat(2,minmax(220px,1fr)); gap:10px; }
     .hidden { display:none; }
     .kpi { font-size:22px; font-weight:700; }
+    .note { font-size:12px; color:var(--muted); }
   </style>
 </head>
 <body>
   <div class="app">
     <aside class="sidebar">
-      <div class="brand">⚔️ Crypto Tracker (MVP Draft)</div>
+      <div class="brand">⚔️ Crypto Tracker MVP</div>
       <div class="muted" style="margin-bottom:12px">Ethereum • ERC-20 • Confirmed only</div>
       <nav class="nav" id="nav"></nav>
     </aside>
@@ -49,29 +51,29 @@
 
 <script>
 const tabs = [
-  ['overview','Обзор'],
-  ['wallets','Кошельки'],
-  ['whitelist','Whitelist'],
-  ['transfers','Транзакции'],
-  ['summary','Сводка'],
-  ['settings','Настройки']
+  ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
+  ['transfers','Транзакции'], ['summary','Сводка'], ['settings','Настройки']
 ];
 
-const mockTransfers = [
-  {date:'2026-02-18 13:11', wallet:'0xAa...11', token:'USDT', dir:'incoming', amount:'1250.00', tx:'0xabc...111'},
-  {date:'2026-02-18 15:42', wallet:'0xBb...22', token:'USDC', dir:'outgoing', amount:'500.00', tx:'0xdef...222'},
-  {date:'2026-02-19 09:01', wallet:'0xAa...11', token:'USDT', dir:'incoming', amount:'200.00', tx:'0xghi...333'},
-];
+const state = {
+  wallets: [],
+  whitelist: [],
+  transfers: [],
+  summaryMode: 'token',
+};
 
-const wallets = [
-  {address:'0xAa...11', label:'Main wallet', tags:['client-a','hot']},
-  {address:'0xBb...22', label:'Reserve', tags:['reserve']}
-];
+const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 6 });
 
-const whitelist = [
-  {token:'USDT', contract:'0xdAC17F958D2ee523a2206206994597C13D831ec7'},
-  {token:'USDC', contract:'0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48'}
-];
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(data?.error || ('HTTP ' + res.status));
+  return data;
+}
 
 function setTab(tab){
   document.querySelectorAll('.view').forEach(v=>v.classList.add('hidden'));
@@ -85,136 +87,192 @@ function renderNav(){
   nav.querySelectorAll('button').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 }
 
+function walletOptionsDatalist(id) {
+  return `<datalist id="${id}">${state.wallets.map(w => `<option value="${w.address}">${w.label || ''}</option>`).join('')}</datalist>`;
+}
+
+function tokenOptions(optionsId) {
+  return `<select id="${optionsId}"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}">${t.tokenName}</option>`).join('')}</select>`;
+}
+
 function renderOverview(){
-  const incoming = mockTransfers.filter(t=>t.dir==='incoming').reduce((s,t)=>s+Number(t.amount),0);
-  const outgoing = mockTransfers.filter(t=>t.dir==='outgoing').reduce((s,t)=>s+Number(t.amount),0);
+  const incoming = state.transfers.filter(t=>t.direction==='incoming').reduce((s,t)=>s+Number(t.amountNormalized || 0),0);
+  const outgoing = state.transfers.filter(t=>t.direction==='outgoing').reduce((s,t)=>s+Number(t.amountNormalized || 0),0);
   document.getElementById('view-overview').innerHTML = `
-    <div class="card"><h2>Обзор</h2><div class="muted">Черновой экран MVP</div></div>
+    <div class="card"><h2>Обзор</h2><div class="muted">Рабочий MVP на реальных API</div></div>
     <div class="grid2">
-      <div class="card"><div class="muted">Кошельков</div><div class="kpi">${wallets.length}</div></div>
-      <div class="card"><div class="muted">Whitelist токенов</div><div class="kpi">${whitelist.length}</div></div>
-      <div class="card"><div class="muted">Входящие (USDT/USDC demo)</div><div class="kpi in">${incoming}</div></div>
-      <div class="card"><div class="muted">Исходящие (USDT/USDC demo)</div><div class="kpi out">${outgoing}</div></div>
-    </div>`;
+      <div class="card"><div class="muted">Кошельков</div><div class="kpi">${state.wallets.length}</div></div>
+      <div class="card"><div class="muted">Whitelist токенов</div><div class="kpi">${state.whitelist.length}</div></div>
+      <div class="card"><div class="muted">Входящие (текущая выборка)</div><div class="kpi in">${fmt(incoming)}</div></div>
+      <div class="card"><div class="muted">Исходящие (текущая выборка)</div><div class="kpi out">${fmt(outgoing)}</div></div>
+    </div>
+    <div class="card"><div class="row"><button id="manual-sync" class="primary">Обновить из Etherscan</button><span class="note" id="sync-note"></span></div></div>`;
+
+  document.getElementById('manual-sync').onclick = async () => {
+    const note = document.getElementById('sync-note');
+    note.textContent = 'Синхронизация...';
+    try {
+      const r = await api('/api/sync/trigger', { method: 'POST' });
+      note.textContent = `Готово: wallets=${r.wallets}, inserted=${r.inserted}`;
+      await refreshAll();
+    } catch (e) {
+      note.textContent = 'Ошибка: ' + e.message;
+    }
+  };
 }
 
 function renderWallets(){
   document.getElementById('view-wallets').innerHTML = `
     <div class="card"><h2>Кошельки</h2><div class="muted">Добавление вручную (copy/paste) + теги</div></div>
+    <div class="card"><div class="row">
+      <input id="wallet-address" placeholder="0x... address" style="min-width:280px" />
+      <input id="wallet-label" placeholder="Label" />
+      <input id="wallet-tags" placeholder="tags через запятую" style="min-width:220px" />
+      <button id="add-wallet" class="primary">Добавить</button>
+      <span class="note" id="wallet-note"></span>
+    </div></div>
     <div class="card">
-      <div class="row">
-        <input placeholder="0x... address" style="min-width:280px" />
-        <input placeholder="Label" />
-        <input placeholder="tags через запятую" style="min-width:220px" />
-        <button class="primary">Добавить</button>
-      </div>
-    </div>
-    <div class="card">
-      <table><thead><tr><th>Address</th><th>Label</th><th>Тег кошелька</th><th></th></tr></thead>
-      <tbody>${wallets.map(w=>`<tr><td>${w.address}</td><td>${w.label}</td><td>${w.tags.join(', ')}</td><td><button>Удалить</button></td></tr>`).join('')}</tbody></table>
+      <table><thead><tr><th>Address</th><th>Label</th><th>Тег кошелька</th></tr></thead>
+      <tbody>${state.wallets.map(w=>`<tr><td>${w.address}</td><td>${w.label || ''}</td><td>${(w.tags || []).map(t=>t.tag).join(', ')}</td></tr>`).join('')}</tbody></table>
     </div>`;
+
+  document.getElementById('add-wallet').onclick = async () => {
+    const note = document.getElementById('wallet-note');
+    const address = document.getElementById('wallet-address').value.trim();
+    const label = document.getElementById('wallet-label').value.trim();
+    const tags = document.getElementById('wallet-tags').value.split(',').map(s => s.trim()).filter(Boolean);
+    try {
+      await api('/api/wallets', { method: 'POST', body: JSON.stringify({ address, label, tags }) });
+      note.textContent = 'Добавлено';
+      await refreshAll();
+      renderWallets();
+    } catch (e) {
+      note.textContent = 'Ошибка: ' + e.message;
+    }
+  };
 }
 
 function renderWhitelist(){
   document.getElementById('view-whitelist').innerHTML = `
-    <div class="card"><h2>Whitelist контрактов</h2><div class="muted">Только эти ERC-20 учитываются в отчётах</div></div>
+    <div class="card"><h2>Whitelist контрактов</h2><div class="muted">Только эти ERC-20 учитываются</div></div>
     <div class="card"><div class="row">
-      <input placeholder="Token name (USDT)" />
-      <input placeholder="Contract address 0x..." style="min-width:360px" />
-      <button class="primary">Добавить</button>
+      <input id="token-name" placeholder="Token name (USDT)" />
+      <input id="contract-address" placeholder="Contract address 0x..." style="min-width:360px" />
+      <button id="add-token" class="primary">Добавить</button>
+      <span class="note" id="token-note"></span>
     </div></div>
-    <div class="card"><table><thead><tr><th>Token</th><th>Contract</th><th></th></tr></thead>
-      <tbody>${whitelist.map(t=>`<tr><td>${t.token}</td><td>${t.contract}</td><td><button>Удалить</button></td></tr>`).join('')}</tbody></table></div>`;
+    <div class="card"><table><thead><tr><th>Token</th><th>Contract</th></tr></thead>
+      <tbody>${state.whitelist.map(t=>`<tr><td>${t.tokenName}</td><td>${t.contractAddress}</td></tr>`).join('')}</tbody></table></div>`;
+
+  document.getElementById('add-token').onclick = async () => {
+    const note = document.getElementById('token-note');
+    const tokenName = document.getElementById('token-name').value.trim();
+    const contractAddress = document.getElementById('contract-address').value.trim();
+    try {
+      await api('/api/whitelist', { method: 'POST', body: JSON.stringify({ tokenName, contractAddress }) });
+      note.textContent = 'Добавлено';
+      await refreshAll();
+      renderWhitelist();
+    } catch (e) {
+      note.textContent = 'Ошибка: ' + e.message;
+    }
+  };
+}
+
+function transferQuery(prefix = '') {
+  const s = document.getElementById(prefix + 'start')?.value || '';
+  const e = document.getElementById(prefix + 'end')?.value || '';
+  const d = document.getElementById(prefix + 'direction')?.value || '';
+  const t = document.getElementById(prefix + 'token')?.value || '';
+  const w = document.getElementById(prefix + 'wallet')?.value || '';
+  const q = new URLSearchParams();
+  if (s) q.set('start', s);
+  if (e) q.set('end', e);
+  if (d) q.set('direction', d);
+  if (t) q.set('tokenContract', t);
+  if (w) q.set('walletAddress', w);
+  return q.toString();
+}
+
+async function loadTransfers() {
+  const q = transferQuery('t-');
+  state.transfers = await api('/api/transfers' + (q ? '?' + q : ''));
+  renderTransfers();
+  renderOverview();
 }
 
 function renderTransfers(){
   document.getElementById('view-transfers').innerHTML = `
-    <div class="card"><h2>Транзакции</h2><div class="muted">Фильтры: дата, вход/выход, токен, кошелёк</div></div>
+    <div class="card"><h2>Транзакции</h2><div class="muted">Реальные данные из БД</div></div>
     <div class="card"><div class="row">
-      <input type="date" /><input type="date" />
-      <select><option>Все направления</option><option>Incoming</option><option>Outgoing</option></select>
-      <select><option>Все токены</option><option>USDT</option><option>USDC</option></select>
-      <input list="wallet-options-transfers" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" />
-      <datalist id="wallet-options-transfers">
-        <option value="0xAa...11">Main wallet</option>
-        <option value="0xBb...22">Reserve</option>
-      </datalist>
-      <button>Применить</button>
-      <button>Обновить</button>
-      <button class="primary">Экспорт CSV</button>
-      <button class="primary">Экспорт XLSX</button>
+      <input id="t-start" type="date" /><input id="t-end" type="date" />
+      <select id="t-direction"><option value="">Все направления</option><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></select>
+      ${tokenOptions('t-token')}
+      <input id="t-wallet" list="wallet-options-transfers" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" />
+      ${walletOptionsDatalist('wallet-options-transfers')}
+      <button id="t-apply">Применить</button>
+      <button id="t-refresh">Обновить</button>
     </div></div>
     <div class="card"><table><thead><tr><th>Дата</th><th>Кошелёк</th><th>Токен</th><th>Напр.</th><th>Сумма</th><th>TX</th></tr></thead>
-      <tbody>${mockTransfers.map(t=>`<tr><td>${t.date}</td><td>${t.wallet}</td><td>${t.token}</td><td><span class="pill ${t.dir==='incoming'?'in':'out'}">${t.dir}</span></td><td>${t.amount}</td><td>${t.tx}</td></tr>`).join('')}</tbody></table></div>`;
+      <tbody>${state.transfers.map(t=>`<tr><td>${new Date(t.blockTimestamp).toLocaleString('ru-RU')}</td><td>${t.wallet?.address || ''}</td><td>${t.tokenName}</td><td><span class="pill ${t.direction==='incoming'?'in':'out'}">${t.direction}</span></td><td>${fmt(t.amountNormalized)}</td><td>${t.txHash.slice(0,12)}...</td></tr>`).join('')}</tbody></table></div>`;
+
+  document.getElementById('t-apply').onclick = loadTransfers;
+  document.getElementById('t-refresh').onclick = async () => { await refreshAll(); await loadTransfers(); };
 }
 
-function renderSummary(){
+async function loadSummary() {
+  const q = transferQuery('s-');
+  const data = await api(`/api/summary?mode=${state.summaryMode}` + (q ? '&' + q : ''));
+  renderSummary(data);
+}
+
+function renderSummary(summaryRows = []){
   document.getElementById('view-summary').innerHTML = `
-    <div class="card"><h2>Сводка</h2><div class="muted">Итоги по токенам или по кошелькам (toggle)</div></div>
+    <div class="card"><h2>Сводка</h2><div class="muted">Итоги по токенам или кошелькам</div></div>
     <div class="card"><div class="row">
-      <input type="date" /><input type="date" />
-      <select><option>Все направления</option><option>Incoming</option><option>Outgoing</option></select>
-      <select><option>Все токены</option><option>USDT</option><option>USDC</option></select>
-      <input list="wallet-options-summary" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" />
-      <datalist id="wallet-options-summary">
-        <option value="0xAa...11">Main wallet</option>
-        <option value="0xBb...22">Reserve</option>
-      </datalist>
-      <button>Применить</button>
-      <button>Обновить</button>
-      <button id="summary-toggle-token" class="primary">По токенам</button>
-      <button id="summary-toggle-wallet">По кошелькам</button>
+      <input id="s-start" type="date" /><input id="s-end" type="date" />
+      <select id="s-direction"><option value="">Все направления</option><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></select>
+      ${tokenOptions('s-token')}
+      <input id="s-wallet" list="wallet-options-summary" placeholder="Поиск кошелька (вставь адрес)" style="min-width:280px" />
+      ${walletOptionsDatalist('wallet-options-summary')}
+      <button id="s-apply">Применить</button>
+      <button id="s-refresh">Обновить</button>
+      <button id="s-mode-token" class="${state.summaryMode === 'token' ? 'primary' : ''}">По токенам</button>
+      <button id="s-mode-wallet" class="${state.summaryMode === 'wallet' ? 'primary' : ''}">По кошелькам</button>
     </div></div>
-    <div class="card" id="summary-token-table"><h3>По токенам</h3>
-      <table><thead><tr><th>Токен</th><th>Вход</th><th>Выход</th></tr></thead>
-      <tbody><tr><td>USDT</td><td class="in">1450.00</td><td class="out">0.00</td></tr><tr><td>USDC</td><td class="in">0.00</td><td class="out">500.00</td></tr></tbody></table>
-    </div>
-    <div class="card hidden" id="summary-wallet-table"><h3>По кошелькам</h3>
-      <table><thead><tr><th>Кошелёк</th><th>Тег</th><th>Вход</th><th>Выход</th></tr></thead>
-      <tbody><tr><td>0xAa...11</td><td>client-a, hot</td><td class="in">1450.00</td><td class="out">0.00</td></tr><tr><td>0xBb...22</td><td>reserve</td><td class="in">0.00</td><td class="out">500.00</td></tr></tbody></table>
-    </div>`;
+    <div class="card"><table><thead><tr><th>${state.summaryMode === 'token' ? 'Токен' : 'Кошелёк'}</th>${state.summaryMode === 'wallet' ? '<th>Теги</th>' : ''}<th>Вход</th><th>Выход</th></tr></thead>
+      <tbody>${summaryRows.map(r => `<tr><td>${r.key}</td>${state.summaryMode === 'wallet' ? `<td>${(r.walletTags || []).join(', ')}</td>` : ''}<td class="in">${fmt(r.incoming)}</td><td class="out">${fmt(r.outgoing)}</td></tr>`).join('')}</tbody></table></div>`;
 
-  const tokenBtn = document.getElementById('summary-toggle-token');
-  const walletBtn = document.getElementById('summary-toggle-wallet');
-  const tokenTable = document.getElementById('summary-token-table');
-  const walletTable = document.getElementById('summary-wallet-table');
-
-  tokenBtn.onclick = () => {
-    tokenTable.classList.remove('hidden');
-    walletTable.classList.add('hidden');
-    tokenBtn.classList.add('primary');
-    walletBtn.classList.remove('primary');
-  };
-
-  walletBtn.onclick = () => {
-    walletTable.classList.remove('hidden');
-    tokenTable.classList.add('hidden');
-    walletBtn.classList.add('primary');
-    tokenBtn.classList.remove('primary');
-  };
+  document.getElementById('s-apply').onclick = loadSummary;
+  document.getElementById('s-refresh').onclick = async () => { await refreshAll(); await loadSummary(); };
+  document.getElementById('s-mode-token').onclick = async () => { state.summaryMode = 'token'; await loadSummary(); };
+  document.getElementById('s-mode-wallet').onclick = async () => { state.summaryMode = 'wallet'; await loadSummary(); };
 }
 
 function renderSettings(){
   document.getElementById('view-settings').innerHTML = `
     <div class="card"><h2>Настройки</h2><div class="muted">Автообновление + роли</div></div>
-    <div class="card"><div class="row">
-      <label>Auto-refresh interval:</label>
-      <select><option>1 minute</option><option>1 hour</option><option>1 day</option></select>
-      <button class="primary">Сохранить</button>
-    </div></div>
-    <div class="card"><h3>Роли доступа</h3>
-      <ul><li><b>admin</b> — полный доступ</li><li><b>read_only</b> — только просмотр</li></ul>
-    </div>`;
+    <div class="card"><div class="row"><label>Auto-refresh interval:</label><select><option>1 minute</option><option>1 hour</option><option>1 day</option></select><button class="primary">Сохранить</button></div></div>
+    <div class="card"><h3>Роли доступа</h3><ul><li><b>admin</b> — полный доступ</li><li><b>read_only</b> — только просмотр</li></ul></div>`;
 }
 
-renderNav();
-renderOverview();
-renderWallets();
-renderWhitelist();
-renderTransfers();
-renderSummary();
-renderSettings();
-setTab('overview');
+async function refreshAll() {
+  state.wallets = await api('/api/wallets');
+  state.whitelist = await api('/api/whitelist');
+  state.transfers = await api('/api/transfers');
+}
+
+(async function init() {
+  renderNav();
+  await refreshAll();
+  renderOverview();
+  renderWallets();
+  renderWhitelist();
+  renderTransfers();
+  await loadSummary();
+  renderSettings();
+  setTab('overview');
+})();
 </script>
 </body>
 </html>
