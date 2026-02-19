@@ -46,6 +46,11 @@ function normalizeAmount(raw, decimals) {
   return n / 10 ** d;
 }
 
+const ETHERSCAN_RPS = Math.max(1, Number(process.env.ETHERSCAN_RPS || 5));
+const ETHERSCAN_MIN_INTERVAL_MS = Math.ceil(1000 / ETHERSCAN_RPS);
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 async function runManualSync() {
   const apiKey = process.env.ETHERSCAN_API_KEY;
   if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not set');
@@ -64,8 +69,25 @@ async function runManualSync() {
   syncState.inserted = 0;
 
   try {
+    let lastCallAt = 0;
     for (const wallet of wallets) {
-      const response = await client.fetchErc20Transfers(wallet.address, 1, 200);
+      const now = Date.now();
+      const wait = Math.max(0, ETHERSCAN_MIN_INTERVAL_MS - (now - lastCallAt));
+      if (wait > 0) await sleep(wait);
+
+      let response;
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        try {
+          response = await client.fetchErc20Transfers(wallet.address, 1, 200);
+          break;
+        } catch (e) {
+          const msg = String(e?.message || e).toLowerCase();
+          const rateLimited = msg.includes('rate limit') || msg.includes('max calls per sec');
+          if (!rateLimited || attempt === 5) throw e;
+          await sleep(attempt * 500);
+        }
+      }
+      lastCallAt = Date.now();
       const result = Array.isArray(response?.result) ? response.result : [];
 
       for (const tx of result) {
