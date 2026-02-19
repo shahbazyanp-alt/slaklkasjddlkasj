@@ -180,6 +180,17 @@ function renderWallets(){
       <span class="note" id="wallet-note"></span>
     </div></div>
     <div class="card">
+      <h3>Массовое добавление кошельков</h3>
+      <div class="muted">Вставь список адресов (по одному в строке, или через пробел/запятую)</div>
+      <div class="row" style="margin-top:8px">
+        <textarea id="wallet-bulk-input" placeholder="0x...\n0x...\n0x..." style="min-width:480px;min-height:120px;background:#0f1730;color:#e9efff;border:1px solid #2a3a64;border-radius:10px;padding:10px"></textarea>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="add-wallet-bulk" class="primary">Добавить списком</button>
+        <span class="note" id="wallet-bulk-note"></span>
+      </div>
+    </div>
+    <div class="card">
       <table><thead><tr><th>Address</th><th>Label</th><th>Тег кошелька</th><th></th></tr></thead>
       <tbody>${state.wallets.map(w=>`<tr><td>${w.address}</td><td>${w.label || ''}</td><td>${(w.tags || []).map(t=>t.tag).join(', ')}</td><td><button data-delete-wallet="${w.id}">Удалить</button></td></tr>`).join('')}</tbody></table>
     </div>`;
@@ -192,6 +203,20 @@ function renderWallets(){
     try {
       await api('/api/wallets', { method: 'POST', body: JSON.stringify({ address, label, tags }) });
       note.textContent = 'Добавлено';
+      await refreshAll();
+      renderWallets();
+      renderOverview();
+    } catch (e) {
+      note.textContent = 'Ошибка: ' + e.message;
+    }
+  };
+
+  document.getElementById('add-wallet-bulk').onclick = async () => {
+    const note = document.getElementById('wallet-bulk-note');
+    const addresses = document.getElementById('wallet-bulk-input').value;
+    try {
+      const r = await api('/api/wallets/bulk', { method: 'POST', body: JSON.stringify({ addresses }) });
+      note.textContent = `Готово: добавлено ${r.created}, пропущено ${r.skippedExisting}, невалидных ${r.invalid.length}`;
       await refreshAll();
       renderWallets();
       renderOverview();

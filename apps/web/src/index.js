@@ -164,6 +164,47 @@ async function handleApi(req, res) {
     return sendJson(res, 200, { ok: true });
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/wallets/bulk') {
+    const body = await readJsonBody(req);
+    const raw = String(body.addresses || '');
+    const addresses = raw
+      .split(/[\n,;\s]+/g)
+      .map((x) => x.trim())
+      .filter(Boolean);
+
+    if (!addresses.length) return sendJson(res, 400, { error: 'addresses is required' });
+
+    const unique = [...new Set(addresses)];
+    const valid = unique.filter((a) => /^0x[a-fA-F0-9]{40}$/.test(a));
+    const invalid = unique.filter((a) => !/^0x[a-fA-F0-9]{40}$/.test(a));
+
+    if (!valid.length) {
+      return sendJson(res, 400, { error: 'no valid ethereum addresses found', invalid });
+    }
+
+    const existing = await prisma.wallet.findMany({
+      where: { address: { in: valid } },
+      select: { address: true },
+    });
+    const existingSet = new Set(existing.map((x) => x.address.toLowerCase()));
+    const toCreate = valid.filter((a) => !existingSet.has(a.toLowerCase()));
+
+    if (toCreate.length) {
+      await prisma.wallet.createMany({
+        data: toCreate.map((address) => ({ address })),
+      });
+    }
+
+    return sendJson(res, 200, {
+      ok: true,
+      input: addresses.length,
+      unique: unique.length,
+      created: toCreate.length,
+      skippedExisting: valid.length - toCreate.length,
+      invalid,
+    });
+  }
+
   // tag admin
   if (req.method === 'GET' && url.pathname === '/api/tags') {
     const rows = await prisma.walletTag.groupBy({
