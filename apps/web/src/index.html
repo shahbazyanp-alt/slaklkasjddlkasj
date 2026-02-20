@@ -115,16 +115,29 @@ function renderSyncLogs(logEl, logs = []) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+function applySyncStatusToUi(status, noteEl, fillEl, logEl) {
+  fillEl.style.width = `${status.progress || 0}%`;
+  noteEl.textContent = status.running
+    ? `Синк: ${status.processedWallets}/${status.totalWallets} кошельков, +${status.inserted} записей`
+    : (status.error
+      ? `Ошибка: ${status.error}`
+      : `Готово: ${status.processedWallets}/${status.totalWallets}, +${status.inserted}`);
+  renderSyncLogs(logEl, status.logs || []);
+}
+
+async function hydrateSyncUi(noteEl, fillEl, logEl) {
+  try {
+    const status = await api('/api/sync/status');
+    applySyncStatusToUi(status, noteEl, fillEl, logEl);
+  } catch {
+    // no-op
+  }
+}
+
 async function startSyncWithProgress(noteEl, fillEl, logEl) {
   await api('/api/sync/trigger', { method: 'POST' });
   const finalStatus = await pollSyncStatus((status) => {
-    fillEl.style.width = `${status.progress || 0}%`;
-    noteEl.textContent = status.running
-      ? `Синк: ${status.processedWallets}/${status.totalWallets} кошельков, +${status.inserted} записей`
-      : (status.error
-        ? `Ошибка: ${status.error}`
-        : `Готово: ${status.processedWallets}/${status.totalWallets}, +${status.inserted}`);
-    renderSyncLogs(logEl, status.logs || []);
+    applySyncStatusToUi(status, noteEl, fillEl, logEl);
   });
   return finalStatus;
 }
@@ -192,13 +205,13 @@ function renderOverview(){
     <div style="margin-top:10px" class="sync-log" id="sync-log"></div>
     </div>`;
 
+  const note = document.getElementById('sync-note');
+  const fill = document.getElementById('sync-progress-fill');
+  const log = document.getElementById('sync-log');
+  hydrateSyncUi(note, fill, log);
+
   document.getElementById('manual-sync').onclick = async () => {
-    const note = document.getElementById('sync-note');
-    const fill = document.getElementById('sync-progress-fill');
-    const log = document.getElementById('sync-log');
     note.textContent = 'Запуск...';
-    fill.style.width = '0%';
-    renderSyncLogs(log, []);
     try {
       await startSyncWithProgress(note, fill, log);
       await refreshAll();
@@ -408,13 +421,13 @@ function renderTransfers(){
     await loadTransfers();
   };
   document.getElementById('t-refresh').onclick = async () => { await refreshAll(); await loadTransfers(); };
+  const note = document.getElementById('t-sync-note');
+  const fill = document.getElementById('t-sync-fill');
+  const log = document.getElementById('t-sync-log');
+  hydrateSyncUi(note, fill, log);
+
   document.getElementById('t-sync').onclick = async () => {
-    const note = document.getElementById('t-sync-note');
-    const fill = document.getElementById('t-sync-fill');
-    const log = document.getElementById('t-sync-log');
     note.textContent = 'Запуск...';
-    fill.style.width = '0%';
-    renderSyncLogs(log, []);
     try {
       await startSyncWithProgress(note, fill, log);
       await refreshAll();
@@ -539,6 +552,23 @@ function renderBalanceSyncLogs(logEl, logs = []) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
+function applyBalanceSyncStatusToUi(s, noteEl, fillEl, logEl) {
+  fillEl.style.width = `${s.progress || 0}%`;
+  noteEl.textContent = s.running
+    ? `Синк балансов: ${s.processed}/${s.total}`
+    : (s.error ? `Ошибка: ${s.error}` : `Готово: ${s.processed}/${s.total}`);
+  renderBalanceSyncLogs(logEl, s.logs || []);
+}
+
+async function hydrateBalanceSyncUi(noteEl, fillEl, logEl) {
+  try {
+    const s = await api('/api/balances/etherscan/status');
+    applyBalanceSyncStatusToUi(s, noteEl, fillEl, logEl);
+  } catch {
+    // no-op
+  }
+}
+
 async function runBalanceSyncWithProgress(noteEl, fillEl, logEl) {
   await api('/api/balances/etherscan/sync', {
     method: 'POST',
@@ -547,11 +577,7 @@ async function runBalanceSyncWithProgress(noteEl, fillEl, logEl) {
 
   while (true) {
     const s = await api('/api/balances/etherscan/status');
-    fillEl.style.width = `${s.progress || 0}%`;
-    noteEl.textContent = s.running
-      ? `Синк балансов: ${s.processed}/${s.total}`
-      : (s.error ? `Ошибка: ${s.error}` : `Готово: ${s.processed}/${s.total}`);
-    renderBalanceSyncLogs(logEl, s.logs || []);
+    applyBalanceSyncStatusToUi(s, noteEl, fillEl, logEl);
     if (!s.running) break;
     await new Promise((r) => setTimeout(r, 1200));
   }
@@ -588,13 +614,14 @@ function renderBalancesEtherscan() {
     await loadBalancesEtherscan();
   };
   document.getElementById('be-refresh').onclick = loadBalancesEtherscan;
+
+  const note = document.getElementById('be-sync-note');
+  const fill = document.getElementById('be-sync-fill');
+  const log = document.getElementById('be-sync-log');
+  hydrateBalanceSyncUi(note, fill, log);
+
   document.getElementById('be-sync').onclick = async () => {
-    const note = document.getElementById('be-sync-note');
-    const fill = document.getElementById('be-sync-fill');
-    const log = document.getElementById('be-sync-log');
-    fill.style.width = '0%';
     note.textContent = 'Запуск...';
-    renderBalanceSyncLogs(log, []);
     try {
       await runBalanceSyncWithProgress(note, fill, log);
       await loadBalancesEtherscan();
