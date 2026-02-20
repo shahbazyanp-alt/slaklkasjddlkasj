@@ -436,8 +436,8 @@ function renderSummary(summaryRows = []){
       <button id="s-mode-token" class="${state.summaryMode === 'token' ? 'primary' : ''}">По токенам</button>
       <button id="s-mode-wallet" class="${state.summaryMode === 'wallet' ? 'primary' : ''}">По кошелькам</button>
     </div></div>
-    <div class="card"><table><thead><tr><th>${state.summaryMode === 'token' ? 'Токен' : 'Кошелёк'}</th>${state.summaryMode === 'wallet' ? '<th>Теги</th>' : ''}<th>Вход</th><th>Выход</th></tr></thead>
-      <tbody>${summaryRows.map(r => `<tr><td>${r.key}</td>${state.summaryMode === 'wallet' ? `<td>${(r.walletTags || []).join(', ')}</td>` : ''}<td class="in">${fmt(r.incoming)}</td><td class="out">${fmt(r.outgoing)}</td></tr>`).join('')}</tbody></table></div>`;
+    <div class="card"><table><thead><tr><th>${state.summaryMode === 'token' ? 'Токен' : 'Кошелёк'}</th>${state.summaryMode === 'wallet' ? '<th>Теги</th>' : ''}<th>Вход</th><th>Выход</th><th>Итого</th></tr></thead>
+      <tbody>${summaryRows.map(r => `<tr><td>${r.key}</td>${state.summaryMode === 'wallet' ? `<td>${(r.walletTags || []).join(', ')}</td>` : ''}<td class="in">${fmt(r.incoming)}</td><td class="out">${fmt(r.outgoing)}</td><td class="${(Number(r.incoming||0)-Number(r.outgoing||0)) >= 0 ? 'in' : 'out'}">${fmt(Number(r.incoming || 0) - Number(r.outgoing || 0))}</td></tr>`).join('')}</tbody></table></div>`;
 
   const sStart = document.getElementById('s-start');
   const sEnd = document.getElementById('s-end');
