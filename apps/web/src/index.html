@@ -620,13 +620,12 @@ async function runBalanceSyncWithProgress(noteEl, fillEl, logEl) {
 }
 
 function renderBalancesEtherscan() {
-  const sourceRows = state.balancesEtherscan.length ? state.balancesEtherscan : state.balances;
-  const rows = pivotStableRows(sourceRows);
+  const rows = pivotStableRows(state.balancesEtherscan);
   const totalUsdt = rows.reduce((s, r) => s + Number(r.usdt || 0), 0);
   const totalUsdc = rows.reduce((s, r) => s + Number(r.usdc || 0), 0);
 
   document.getElementById('view-balances-etherscan').innerHTML = `
-    <div class="card"><h2>balanceEtherscan</h2><div class="muted">Текущий баланс из Etherscan API. Если синк ещё не запускали — показываем данные из ledger как базовый список.</div></div>
+    <div class="card"><h2>balanceEtherscan</h2><div class="muted">Текущий баланс из Etherscan API (только данные Etherscan sync).</div></div>
     <div class="card"><div class="row">
       <select id="be-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.balanceFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
       <select id="be-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.balanceFilters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
