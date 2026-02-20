@@ -1,7 +1,6 @@
 import { prisma } from '../../../packages/db/src/index.js';
 import { makeEtherscanClient } from '../../../packages/etherscan-client/src/index.js';
 
-const intervalMs = Number(process.env.SYNC_INTERVAL_MS || 60_000);
 const etherscanApiKey = process.env.ETHERSCAN_API_KEY;
 const ETHERSCAN_RPS = Math.max(1, Number(process.env.ETHERSCAN_RPS || 5));
 const ETHERSCAN_MIN_INTERVAL_MS = Math.ceil(1000 / ETHERSCAN_RPS);
@@ -131,11 +130,11 @@ async function runSyncTick() {
 }
 
 async function main() {
-  console.log(`[worker] started, interval=${intervalMs}ms`);
-  await runSyncTick();
+  console.log('[worker] started in manual-only mode (auto refresh disabled)');
+  // Keep worker process alive, but do not run automatic sync ticks.
   setInterval(() => {
-    runSyncTick().catch((err) => console.error('[worker] tick failed', err));
-  }, intervalMs);
+    // noop heartbeat
+  }, 60 * 60 * 1000);
 }
 
 main().catch((err) => {
