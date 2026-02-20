@@ -516,7 +516,32 @@ async function loadBalances() {
   renderBalances();
 }
 
+function pivotStableRows(rows) {
+  const byWallet = new Map();
+  for (const r of rows || []) {
+    const key = String(r.walletAddress || '');
+    if (!key) continue;
+    const prev = byWallet.get(key) || { walletAddress: key, walletNumber: r.walletNumber || '', usdt: 0, usdc: 0 };
+    const token = `${String(r.tokenSymbol || '').toUpperCase()} ${String(r.tokenName || '').toUpperCase()}`;
+    if (token.includes('USDT')) prev.usdt += Number(r.balance || 0);
+    if (token.includes('USDC')) prev.usdc += Number(r.balance || 0);
+    byWallet.set(key, prev);
+  }
+
+  const list = Array.from(byWallet.values());
+  list.sort((a, b) => {
+    const ta = a.usdt + a.usdc;
+    const tb = b.usdt + b.usdc;
+    return state.balanceSort === 'asc' ? ta - tb : tb - ta;
+  });
+  return list;
+}
+
 function renderBalances() {
+  const rows = pivotStableRows(state.balances);
+  const totalUsdt = rows.reduce((s, r) => s + Number(r.usdt || 0), 0);
+  const totalUsdc = rows.reduce((s, r) => s + Number(r.usdc || 0), 0);
+
   document.getElementById('view-balances-ledger').innerHTML = `
     <div class="card"><h2>balanceLedger</h2><div class="muted">Расчётный баланс по ledger (вход - выход) в нашей БД.</div></div>
     <div class="card"><div class="row">
@@ -527,8 +552,9 @@ function renderBalances() {
       <button id="b-refresh">Обновить</button>
     </div></div>
     <div class="card"><table>
-      <thead><tr><th>Номер кошелька</th><th>Кошелёк</th><th>Токен</th><th>Баланс</th></tr></thead>
-      <tbody>${state.balances.map(r => `<tr><td>${r.walletNumber || ''}</td><td>${r.walletAddress}</td><td>${r.tokenName || r.tokenSymbol || ''}</td><td>${fmt(r.balance)}</td></tr>`).join('')}</tbody>
+      <thead><tr><th>Номер кошелька</th><th>Кошелёк</th><th>USDT</th><th>USDC</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td>${r.walletNumber || ''}</td><td>${r.walletAddress}</td><td>${fmt(r.usdt)}</td><td>${fmt(r.usdc)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><th colspan="2">Итого</th><th>${fmt(totalUsdt)}</th><th>${fmt(totalUsdc)}</th></tr></tfoot>
     </table></div>`;
 
   document.getElementById('b-sort-toggle').onclick = async () => {
@@ -594,7 +620,11 @@ async function runBalanceSyncWithProgress(noteEl, fillEl, logEl) {
 }
 
 function renderBalancesEtherscan() {
-  const rows = state.balancesEtherscan.length ? state.balancesEtherscan : state.balances;
+  const sourceRows = state.balancesEtherscan.length ? state.balancesEtherscan : state.balances;
+  const rows = pivotStableRows(sourceRows);
+  const totalUsdt = rows.reduce((s, r) => s + Number(r.usdt || 0), 0);
+  const totalUsdc = rows.reduce((s, r) => s + Number(r.usdc || 0), 0);
+
   document.getElementById('view-balances-etherscan').innerHTML = `
     <div class="card"><h2>balanceEtherscan</h2><div class="muted">Текущий баланс из Etherscan API. Если синк ещё не запускали — показываем данные из ledger как базовый список.</div></div>
     <div class="card"><div class="row">
@@ -610,8 +640,9 @@ function renderBalancesEtherscan() {
     <div style="margin-top:10px" class="sync-log" id="be-sync-log"></div>
     </div>
     <div class="card"><table>
-      <thead><tr><th>Номер кошелька</th><th>Кошелёк</th><th>Токен</th><th>Баланс</th></tr></thead>
-      <tbody>${rows.map(r => `<tr><td>${r.walletNumber || ''}</td><td>${r.walletAddress}</td><td>${r.tokenName || ''}</td><td>${fmt(r.balance)}</td></tr>`).join('')}</tbody>
+      <thead><tr><th>Номер кошелька</th><th>Кошелёк</th><th>USDT</th><th>USDC</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td>${r.walletNumber || ''}</td><td>${r.walletAddress}</td><td>${fmt(r.usdt)}</td><td>${fmt(r.usdc)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><th colspan="2">Итого</th><th>${fmt(totalUsdt)}</th><th>${fmt(totalUsdc)}</th></tr></tfoot>
     </table></div>`;
 
   document.getElementById('be-sort-toggle').onclick = async () => {
