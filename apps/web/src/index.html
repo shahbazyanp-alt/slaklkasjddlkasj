@@ -63,7 +63,11 @@
     </main>
   </div>
 
-<script>
+<script type="module">
+import { fmt } from './ui/format.js';
+import { buildTransfersQuery } from './ui/query.js';
+import { pivotStableRows, sumStableTotals } from './ui/balances.js';
+
 const tabs = [
   ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
   ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки']
@@ -81,8 +85,6 @@ const state = {
   balanceFilters: { tokenContract: '', walletTag: '' },
   balanceSort: 'asc',
 };
-
-const fmt = (n) => Number(n || 0).toLocaleString('ru-RU', { maximumFractionDigits: 6 });
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -353,15 +355,7 @@ function renderWhitelist(){
 }
 
 function buildQueryFromFilters(filters) {
-  const q = new URLSearchParams();
-  if (filters.start) q.set('start', filters.start);
-  if (filters.end) q.set('end', filters.end);
-  if (filters.direction) q.set('direction', filters.direction);
-  if (filters.tokenContract) q.set('tokenContract', filters.tokenContract);
-  if (filters.walletAddress) q.set('walletAddress', filters.walletAddress);
-  if (filters.walletTag) q.set('walletTag', filters.walletTag);
-  if (filters.includeSpam) q.set('includeSpam', '1');
-  return q.toString();
+  return buildTransfersQuery(filters);
 }
 
 async function loadTransfers() {
@@ -516,31 +510,13 @@ async function loadBalances() {
   renderBalances();
 }
 
-function pivotStableRows(rows) {
-  const byWallet = new Map();
-  for (const r of rows || []) {
-    const key = String(r.walletAddress || '');
-    if (!key) continue;
-    const prev = byWallet.get(key) || { walletAddress: key, walletNumber: r.walletNumber || '', usdt: 0, usdc: 0 };
-    const token = `${String(r.tokenSymbol || '').toUpperCase()} ${String(r.tokenName || '').toUpperCase()}`;
-    if (token.includes('USDT')) prev.usdt += Number(r.balance || 0);
-    if (token.includes('USDC')) prev.usdc += Number(r.balance || 0);
-    byWallet.set(key, prev);
-  }
-
-  const list = Array.from(byWallet.values());
-  list.sort((a, b) => {
-    const ta = a.usdt + a.usdc;
-    const tb = b.usdt + b.usdc;
-    return state.balanceSort === 'asc' ? ta - tb : tb - ta;
-  });
-  return list;
+function pivotStableRowsForView(rows) {
+  return pivotStableRows(rows, state.balanceSort);
 }
 
 function renderBalances() {
-  const rows = pivotStableRows(state.balances);
-  const totalUsdt = rows.reduce((s, r) => s + Number(r.usdt || 0), 0);
-  const totalUsdc = rows.reduce((s, r) => s + Number(r.usdc || 0), 0);
+  const rows = pivotStableRowsForView(state.balances);
+  const { totalUsdt, totalUsdc } = sumStableTotals(rows);
 
   document.getElementById('view-balances-ledger').innerHTML = `
     <div class="card"><h2>balanceLedger</h2><div class="muted">Расчётный баланс по ledger (вход - выход) в нашей БД.</div></div>
@@ -620,9 +596,8 @@ async function runBalanceSyncWithProgress(noteEl, fillEl, logEl) {
 }
 
 function renderBalancesEtherscan() {
-  const rows = pivotStableRows(state.balancesEtherscan);
-  const totalUsdt = rows.reduce((s, r) => s + Number(r.usdt || 0), 0);
-  const totalUsdc = rows.reduce((s, r) => s + Number(r.usdc || 0), 0);
+  const rows = pivotStableRowsForView(state.balancesEtherscan);
+  const { totalUsdt, totalUsdc } = sumStableTotals(rows);
 
   document.getElementById('view-balances-etherscan').innerHTML = `
     <div class="card"><h2>balanceEtherscan</h2><div class="muted">Текущий баланс из Etherscan API (только данные Etherscan sync).</div></div>
