@@ -9,10 +9,14 @@
     * { box-sizing: border-box; font-family: Inter, system-ui, sans-serif; }
     body { margin:0; background:var(--bg); color:var(--text); }
     .app { display:grid; grid-template-columns: 240px 1fr; min-height:100vh; }
-    .sidebar { padding:18px; border-right:1px solid #233052; background:#0e1528; }
-    .brand { font-weight:700; margin-bottom:18px; }
+    .sidebar { padding:18px; border-right:1px solid #233052; background:#0e1528; display:flex; flex-direction:column; gap:8px; }
+    .brand { font-weight:700; margin-bottom:10px; }
+    .nav { flex:1; }
     .nav button { width:100%; text-align:left; background:transparent; color:var(--text); border:0; padding:10px 12px; border-radius:10px; cursor:pointer; }
     .nav button.active, .nav button:hover { background:#1a2646; }
+    .nav-bottom { margin-top:auto; padding-top:8px; border-top:1px solid #233052; }
+    .nav-bottom button { width:100%; text-align:left; background:transparent; color:#ffb3b3; border:0; padding:10px 12px; border-radius:10px; cursor:pointer; }
+    .nav-bottom button:hover { background:#2b1a2a; }
     .main { padding:20px; }
     .card { background:var(--panel); border:1px solid #233052; border-radius:14px; padding:14px; margin-bottom:14px; }
     .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
@@ -44,6 +48,7 @@
       <div class="brand">⚔️ Crypto Tracker MVP</div>
       <div class="muted" style="margin-bottom:12px">Ethereum • ERC-20 • Confirmed only</div>
       <nav class="nav" id="nav"></nav>
+      <div class="nav-bottom" id="nav-bottom"></div>
     </aside>
     <main class="main">
       <section id="view-overview" class="view"></section>
@@ -150,6 +155,12 @@ function renderNav(){
   const nav = document.getElementById('nav');
   nav.innerHTML = tabs.map(([id,label])=>'<button data-tab="'+id+'">'+label+'</button>').join('');
   nav.querySelectorAll('button').forEach(b=>b.onclick=()=>{ setTab(b.dataset.tab); });
+
+  const navBottom = document.getElementById('nav-bottom');
+  navBottom.innerHTML = '<button id="logout-btn">Log out</button>';
+  document.getElementById('logout-btn').onclick = () => {
+    window.location.href = '/auth/logout';
+  };
 }
 
 function walletOptionsDatalist(id) {
