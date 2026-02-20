@@ -106,7 +106,12 @@ function tryServeStaticModule(urlPath, res) {
 
   try {
     const content = readFileSync(filePath, 'utf8');
-    res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+    res.writeHead(200, {
+      'Content-Type': 'application/javascript; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
+    });
     res.end(content);
     return true;
   } catch {
@@ -803,11 +808,21 @@ http
       const authUser = getAuthUser(req);
       if (!authUser) {
         const reason = authError ? `Ошибка входа: ${authError}` : '';
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        });
         return res.end(makeLoginHtml(reason));
       }
 
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+      });
       res.end(html);
     } catch (error) {
       if (error?.status === 400) {
