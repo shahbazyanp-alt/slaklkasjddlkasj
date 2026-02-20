@@ -2,6 +2,7 @@
   "name": "@tracker/db",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",

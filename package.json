@@ -14,6 +14,7 @@
     "start:worker": "npm --workspace @tracker/worker run start",
     "db:generate": "npm --workspace @tracker/db run generate",
     "db:migrate": "npm --workspace @tracker/db run migrate",
-    "db:migrate:deploy": "npm --workspace @tracker/db run migrate:deploy"
+    "db:migrate:deploy": "npm --workspace @tracker/db run migrate:deploy",
+    "smoke": "node scripts/smoke-check.mjs"
   }
 }
