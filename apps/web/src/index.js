@@ -8,11 +8,19 @@ import { makeEtherscanClient } from '../../../packages/etherscan-client/src/inde
 const port = process.env.PORT || 3000;
 const html = readFileSync(join(import.meta.dirname, 'index.html'), 'utf8');
 
-const APP_URL = (process.env.APP_URL || '').trim();
-const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
-const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET_V2 || '').trim();
-const GOOGLE_REDIRECT_URI = (process.env.GOOGLE_REDIRECT_URI || '').trim();
-const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim();
+function cleanEnv(value) {
+  const v = String(value || '').trim();
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+    return v.slice(1, -1).trim();
+  }
+  return v;
+}
+
+const APP_URL = cleanEnv(process.env.APP_URL);
+const GOOGLE_CLIENT_ID = cleanEnv(process.env.GOOGLE_CLIENT_ID);
+const GOOGLE_CLIENT_SECRET = cleanEnv(process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET_V2);
+const GOOGLE_REDIRECT_URI = cleanEnv(process.env.GOOGLE_REDIRECT_URI);
+const SESSION_SECRET = cleanEnv(process.env.SESSION_SECRET);
 const SESSION_COOKIE = 'tracker_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const oauthStateStore = new Map();
@@ -429,7 +437,8 @@ async function handleGoogleAuthCallback(req, res) {
     });
 
     if (!tokenRes.ok) {
-      console.error(`Google token exchange failed: ${tokenRes.status}`);
+      const details = await tokenRes.text().catch(() => '');
+      console.error(`Google token exchange failed: ${tokenRes.status} ${details}`);
       res.writeHead(302, { Location: '/?auth_error=oauth_token' });
       return res.end();
     }
