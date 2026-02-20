@@ -185,15 +185,20 @@ function tokenOptions(optionsId) {
 }
 
 function renderOverview(){
-  const incoming = state.transfers.filter(t=>t.direction==='incoming').reduce((s,t)=>s+Number(t.amountNormalized || 0),0);
-  const outgoing = state.transfers.filter(t=>t.direction==='outgoing').reduce((s,t)=>s+Number(t.amountNormalized || 0),0);
+  const tokenNet = (symbol) => state.transfers
+    .filter((t) => String(t.tokenSymbol || '').toUpperCase() === symbol || String(t.tokenName || '').toUpperCase() === symbol)
+    .reduce((s, t) => s + (t.direction === 'incoming' ? Number(t.amountNormalized || 0) : -Number(t.amountNormalized || 0)), 0);
+
+  const usdtBalance = tokenNet('USDT');
+  const usdcBalance = tokenNet('USDC');
+
   document.getElementById('view-overview').innerHTML = `
     <div class="card"><h2>Обзор</h2><div class="muted">Рабочий MVP на реальных API</div></div>
     <div class="grid2">
       <div class="card"><div class="muted">Кошельков</div><div class="kpi">${state.wallets.length}</div></div>
       <div class="card"><div class="muted">Whitelist токенов</div><div class="kpi">${state.whitelist.length}</div></div>
-      <div class="card"><div class="muted">Входящие (текущая выборка)</div><div class="kpi in">${fmt(incoming)}</div></div>
-      <div class="card"><div class="muted">Исходящие (текущая выборка)</div><div class="kpi out">${fmt(outgoing)}</div></div>
+      <div class="card"><div class="muted">Баланс USDT</div><div class="kpi ${usdtBalance >= 0 ? 'in' : 'out'}">${fmt(usdtBalance)}</div></div>
+      <div class="card"><div class="muted">Баланс USDC</div><div class="kpi ${usdcBalance >= 0 ? 'in' : 'out'}">${fmt(usdcBalance)}</div></div>
     </div>
     <div class="card"><div class="row">
       <button id="manual-sync" class="primary">Запустить поиск транзакций (Etherscan)</button>
