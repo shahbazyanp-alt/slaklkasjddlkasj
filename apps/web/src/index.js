@@ -1,4 +1,5 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { prisma } from '../../../packages/db/src/index.js';
@@ -6,6 +7,71 @@ import { makeEtherscanClient } from '../../../packages/etherscan-client/src/inde
 
 const port = process.env.PORT || 3000;
 const html = readFileSync(join(import.meta.dirname, 'index.html'), 'utf8');
+
+const APP_URL = (process.env.APP_URL || '').trim();
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
+const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+const GOOGLE_REDIRECT_URI = (process.env.GOOGLE_REDIRECT_URI || '').trim();
+const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim();
+const SESSION_COOKIE = 'tracker_session';
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+const oauthStateStore = new Map();
+
+function parseCookies(req) {
+  const raw = req.headers.cookie || '';
+  const out = {};
+  for (const pair of raw.split(';')) {
+    const [k, ...rest] = pair.trim().split('=');
+    if (!k) continue;
+    out[k] = decodeURIComponent(rest.join('='));
+  }
+  return out;
+}
+
+function base64url(input) {
+  return Buffer.from(input).toString('base64url');
+}
+
+function signSession(payload) {
+  const encoded = base64url(JSON.stringify(payload));
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(encoded).digest('base64url');
+  return `${encoded}.${sig}`;
+}
+
+function verifySession(token) {
+  if (!token || !SESSION_SECRET) return null;
+  const [encoded, sig] = String(token).split('.');
+  if (!encoded || !sig) return null;
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(encoded).digest('base64url');
+  if (sig !== expected) return null;
+  const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+  if (!payload?.exp || Date.now() > payload.exp) return null;
+  return payload;
+}
+
+function requestBaseUrl(req) {
+  const proto = req.headers['x-forwarded-proto'] || 'http';
+  const host = req.headers.host || 'localhost';
+  return `${proto}://${host}`;
+}
+
+function buildGoogleRedirectUri(req) {
+  if (GOOGLE_REDIRECT_URI) return GOOGLE_REDIRECT_URI;
+  if (APP_URL) return `${APP_URL.replace(/\/$/, '')}/auth/google/callback`;
+  return `${requestBaseUrl(req)}/auth/google/callback`;
+}
+
+function makeLoginHtml(reason = '') {
+  const note = reason ? `<p style="color:#ffb3b3">${reason}</p>` : '';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Login</title></head><body style="font-family:Inter,system-ui,sans-serif;background:#0b1020;color:#e9efff;display:grid;place-items:center;min-height:100vh;margin:0"><div style="background:#121a30;border:1px solid #233052;border-radius:14px;padding:24px;max-width:420px"><h2 style="margin-top:0">Crypto Tracker</h2>${note}<a href="/auth/google" style="display:inline-block;padding:10px 14px;border-radius:10px;background:#5aa9ff;color:#04122b;text-decoration:none;font-weight:700">Войти через Google</a></div></body></html>`;
+}
+
+function cleanupOauthState() {
+  const now = Date.now();
+  for (const [k, exp] of oauthStateStore.entries()) {
+    if (exp < now) oauthStateStore.delete(k);
+  }
+}
 
 const syncState = {
   running: false,
@@ -273,8 +339,143 @@ async function runManualSync() {
   }
 }
 
+function getAuthUser(req) {
+  const cookies = parseCookies(req);
+  return verifySession(cookies[SESSION_COOKIE]);
+}
+
+function setSessionCookie(req, res, payload) {
+  const token = signSession({ ...payload, exp: Date.now() + SESSION_TTL_SECONDS * 1000 });
+  const secure = (req.headers['x-forwarded-proto'] || '').includes('https') || (req.headers.host || '').includes('onrender.com');
+  const cookie = `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_SECONDS}${secure ? '; Secure' : ''}`;
+  res.setHeader('Set-Cookie', cookie);
+}
+
+function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+function requireApiAuth(req, res) {
+  const user = getAuthUser(req);
+  if (!user) {
+    sendJson(res, 401, { error: 'Unauthorized' });
+    return null;
+  }
+  return user;
+}
+
+async function handleGoogleAuthStart(req, res) {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !SESSION_SECRET) {
+    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('Google auth is not configured');
+    return;
+  }
+
+  cleanupOauthState();
+  const state = crypto.randomBytes(24).toString('hex');
+  oauthStateStore.set(state, Date.now() + 10 * 60 * 1000);
+
+  const redirectUri = buildGoogleRedirectUri(req);
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'openid email profile',
+    state,
+    access_type: 'online',
+    prompt: 'select_account',
+  });
+
+  res.writeHead(302, { Location: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}` });
+  res.end();
+}
+
+async function handleGoogleAuthCallback(req, res) {
+  const url = new URL(req.url, 'http://localhost');
+  const code = String(url.searchParams.get('code') || '');
+  const state = String(url.searchParams.get('state') || '');
+  const err = String(url.searchParams.get('error') || '');
+
+  if (err) {
+    res.writeHead(302, { Location: '/?auth_error=google_denied' });
+    return res.end();
+  }
+
+  cleanupOauthState();
+  const exp = oauthStateStore.get(state);
+  if (!state || !exp || exp < Date.now()) {
+    res.writeHead(302, { Location: '/?auth_error=bad_state' });
+    return res.end();
+  }
+  oauthStateStore.delete(state);
+
+  if (!code) {
+    res.writeHead(302, { Location: '/?auth_error=no_code' });
+    return res.end();
+  }
+
+  const redirectUri = buildGoogleRedirectUri(req);
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: GOOGLE_CLIENT_ID,
+      client_secret: GOOGLE_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
+    }).toString(),
+  });
+
+  if (!tokenRes.ok) {
+    throw new Error(`Google token exchange failed: ${tokenRes.status}`);
+  }
+
+  const tokenJson = await tokenRes.json();
+  const accessToken = tokenJson?.access_token;
+  if (!accessToken) throw new Error('No access token from Google');
+
+  const userRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!userRes.ok) throw new Error(`Google userinfo failed: ${userRes.status}`);
+  const profile = await userRes.json();
+
+  if (!profile?.email || !profile?.email_verified) {
+    throw new Error('Google account must have verified email');
+  }
+
+  const user = await prisma.user.upsert({
+    where: { email: String(profile.email).toLowerCase() },
+    update: {},
+    create: {
+      email: String(profile.email).toLowerCase(),
+      passwordHash: 'oauth_google',
+      role: 'read_only',
+    },
+  });
+
+  setSessionCookie(req, res, { uid: user.id, email: user.email, role: user.role });
+  res.writeHead(302, { Location: '/' });
+  res.end();
+}
+
 async function handleApi(req, res) {
   const url = new URL(req.url, 'http://localhost');
+
+  if (req.method === 'GET' && url.pathname === '/api/auth/me') {
+    const me = getAuthUser(req);
+    if (!me) return sendJson(res, 401, { error: 'Unauthorized' });
+    return sendJson(res, 200, { user: { id: me.uid, email: me.email, role: me.role } });
+  }
+
+  const authUser = requireApiAuth(req, res);
+  if (!authUser) return true;
+  const isReadOnly = authUser.role === 'read_only';
+  const isWriteMethod = req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS';
+  if (isReadOnly && isWriteMethod) {
+    return sendJson(res, 403, { error: 'Forbidden: read_only role' });
+  }
 
   // wallets
   if (req.method === 'GET' && url.pathname === '/api/wallets') {
@@ -584,14 +785,38 @@ async function handleApi(req, res) {
 http
   .createServer(async (req, res) => {
     try {
-      if (req.url === '/health') {
+      const url = new URL(req.url, 'http://localhost');
+
+      if (url.pathname === '/health') {
         return sendJson(res, 200, { ok: true, service: 'tracker-web' });
       }
 
-      if (req.url.startsWith('/api/')) {
+      if (url.pathname === '/auth/google') {
+        return handleGoogleAuthStart(req, res);
+      }
+
+      if (url.pathname === '/auth/google/callback') {
+        return handleGoogleAuthCallback(req, res);
+      }
+
+      if (url.pathname === '/auth/logout') {
+        clearSessionCookie(res);
+        res.writeHead(302, { Location: '/' });
+        return res.end();
+      }
+
+      if (url.pathname.startsWith('/api/')) {
         const handled = await handleApi(req, res);
         if (handled !== false) return;
         return sendJson(res, 404, { error: 'Not found' });
+      }
+
+      const authError = url.searchParams.get('auth_error');
+      const authUser = getAuthUser(req);
+      if (!authUser) {
+        const reason = authError ? `Ошибка входа: ${authError}` : '';
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        return res.end(makeLoginHtml(reason));
       }
 
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

@@ -32,6 +32,16 @@ services:
         sync: false
       - key: ETHERSCAN_RPS
         value: "5"
+      - key: APP_URL
+        value: "https://tracker-web-9d6e.onrender.com"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: "https://tracker-web-9d6e.onrender.com/auth/google/callback"
       - key: PORT
         value: "10000"
 
