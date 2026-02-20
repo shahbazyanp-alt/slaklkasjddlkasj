@@ -1,7 +1,7 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { prisma } from '../../../packages/db/src/index.js';
 import { makeEtherscanClient } from '../../../packages/etherscan-client/src/index.js';
 import { normalizeAddress, syncWalletTransfers } from '../../../packages/sync-engine/src/index.js';
@@ -95,6 +95,22 @@ function cleanupOauthState() {
   const now = Date.now();
   for (const [k, exp] of oauthStateStore.entries()) {
     if (exp < now) oauthStateStore.delete(k);
+  }
+}
+
+function tryServeStaticModule(urlPath, res) {
+  if (!urlPath.startsWith('/ui/') || !urlPath.endsWith('.js')) return false;
+  const baseDir = resolve(import.meta.dirname, 'ui');
+  const filePath = resolve(import.meta.dirname, `.${urlPath}`);
+  if (!filePath.startsWith(baseDir)) return false;
+
+  try {
+    const content = readFileSync(filePath, 'utf8');
+    res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
+    res.end(content);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -757,6 +773,10 @@ http
 
       if (url.pathname === '/health') {
         return sendJson(res, 200, { ok: true, service: 'tracker-web' });
+      }
+
+      if (tryServeStaticModule(url.pathname, res)) {
+        return;
       }
 
       if (url.pathname === '/auth/google') {
