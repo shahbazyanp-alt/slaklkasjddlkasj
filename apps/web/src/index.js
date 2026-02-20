@@ -391,73 +391,91 @@ async function handleGoogleAuthStart(req, res) {
 }
 
 async function handleGoogleAuthCallback(req, res) {
-  const url = new URL(req.url, 'http://localhost');
-  const code = String(url.searchParams.get('code') || '');
-  const state = String(url.searchParams.get('state') || '');
-  const err = String(url.searchParams.get('error') || '');
+  try {
+    const url = new URL(req.url, 'http://localhost');
+    const code = String(url.searchParams.get('code') || '');
+    const state = String(url.searchParams.get('state') || '');
+    const err = String(url.searchParams.get('error') || '');
 
-  if (err) {
-    res.writeHead(302, { Location: '/?auth_error=google_denied' });
-    return res.end();
+    if (err) {
+      res.writeHead(302, { Location: '/?auth_error=google_denied' });
+      return res.end();
+    }
+
+    cleanupOauthState();
+    const exp = oauthStateStore.get(state);
+    if (!state || !exp || exp < Date.now()) {
+      res.writeHead(302, { Location: '/?auth_error=bad_state' });
+      return res.end();
+    }
+    oauthStateStore.delete(state);
+
+    if (!code) {
+      res.writeHead(302, { Location: '/?auth_error=no_code' });
+      return res.end();
+    }
+
+    const redirectUri = buildGoogleRedirectUri(req);
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+
+    if (!tokenRes.ok) {
+      console.error(`Google token exchange failed: ${tokenRes.status}`);
+      res.writeHead(302, { Location: '/?auth_error=oauth_token' });
+      return res.end();
+    }
+
+    const tokenJson = await tokenRes.json();
+    const accessToken = tokenJson?.access_token;
+    if (!accessToken) {
+      res.writeHead(302, { Location: '/?auth_error=no_access_token' });
+      return res.end();
+    }
+
+    const userRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!userRes.ok) {
+      console.error(`Google userinfo failed: ${userRes.status}`);
+      res.writeHead(302, { Location: '/?auth_error=oauth_userinfo' });
+      return res.end();
+    }
+    const profile = await userRes.json();
+
+    if (!profile?.email || !profile?.email_verified) {
+      res.writeHead(302, { Location: '/?auth_error=unverified_email' });
+      return res.end();
+    }
+
+    const user = await prisma.user.upsert({
+      where: { email: String(profile.email).toLowerCase() },
+      update: {},
+      create: {
+        email: String(profile.email).toLowerCase(),
+        passwordHash: 'oauth_google',
+        role: 'read_only',
+      },
+    });
+
+    setSessionCookie(req, res, { uid: user.id, email: user.email, role: user.role });
+    res.writeHead(302, { Location: '/' });
+    res.end();
+  } catch (error) {
+    console.error('OAuth callback failed', error);
+    if (!res.headersSent) {
+      res.writeHead(302, { Location: '/?auth_error=oauth_exception' });
+      return res.end();
+    }
   }
-
-  cleanupOauthState();
-  const exp = oauthStateStore.get(state);
-  if (!state || !exp || exp < Date.now()) {
-    res.writeHead(302, { Location: '/?auth_error=bad_state' });
-    return res.end();
-  }
-  oauthStateStore.delete(state);
-
-  if (!code) {
-    res.writeHead(302, { Location: '/?auth_error=no_code' });
-    return res.end();
-  }
-
-  const redirectUri = buildGoogleRedirectUri(req);
-  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      redirect_uri: redirectUri,
-      grant_type: 'authorization_code',
-    }).toString(),
-  });
-
-  if (!tokenRes.ok) {
-    throw new Error(`Google token exchange failed: ${tokenRes.status}`);
-  }
-
-  const tokenJson = await tokenRes.json();
-  const accessToken = tokenJson?.access_token;
-  if (!accessToken) throw new Error('No access token from Google');
-
-  const userRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!userRes.ok) throw new Error(`Google userinfo failed: ${userRes.status}`);
-  const profile = await userRes.json();
-
-  if (!profile?.email || !profile?.email_verified) {
-    throw new Error('Google account must have verified email');
-  }
-
-  const user = await prisma.user.upsert({
-    where: { email: String(profile.email).toLowerCase() },
-    update: {},
-    create: {
-      email: String(profile.email).toLowerCase(),
-      passwordHash: 'oauth_google',
-      role: 'read_only',
-    },
-  });
-
-  setSessionCookie(req, res, { uid: user.id, email: user.email, role: user.role });
-  res.writeHead(302, { Location: '/' });
-  res.end();
 }
 
 async function handleApi(req, res) {
@@ -782,6 +800,14 @@ async function handleApi(req, res) {
   return false;
 }
 
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection in web process', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception in web process', error);
+});
+
 http
   .createServer(async (req, res) => {
     try {
@@ -792,11 +818,11 @@ http
       }
 
       if (url.pathname === '/auth/google') {
-        return handleGoogleAuthStart(req, res);
+        return await handleGoogleAuthStart(req, res);
       }
 
       if (url.pathname === '/auth/google/callback') {
-        return handleGoogleAuthCallback(req, res);
+        return await handleGoogleAuthCallback(req, res);
       }
 
       if (url.pathname === '/auth/logout') {
