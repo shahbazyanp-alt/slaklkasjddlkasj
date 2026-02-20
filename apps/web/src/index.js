@@ -167,7 +167,11 @@ async function acquireGlobalEtherscanSlot() {
 async function runBalancesEtherscanSync({ tokenContract, walletTag } = {}) {
   const apiKey = process.env.ETHERSCAN_API_KEY;
   if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not set');
-  const client = makeEtherscanClient({ apiKey, beforeRequest: acquireGlobalEtherscanSlot });
+  const client = makeEtherscanClient({
+    apiKey,
+    beforeRequest: acquireGlobalEtherscanSlot,
+    onRetry: ({ attempt, reason }) => pushBalanceLog(`Etherscan retry #${attempt}: ${reason}`, 'warn'),
+  });
 
   const wallets = await prisma.wallet.findMany({
     where: walletTag ? { tags: { some: { tag: walletTag } } } : undefined,
@@ -196,19 +200,7 @@ async function runBalancesEtherscanSync({ tokenContract, walletTag } = {}) {
         const wait = Math.max(0, ETHERSCAN_MIN_INTERVAL_MS - (now - lastCallAt));
         if (wait > 0) await sleep(wait);
 
-        let raw;
-        for (let attempt = 1; attempt <= 5; attempt += 1) {
-          try {
-            raw = await client.fetchTokenBalance(w.address, t.contractAddress);
-            break;
-          } catch (e) {
-            const msg = String(e?.message || e).toLowerCase();
-            const rateLimited = msg.includes('rate limit') || msg.includes('max calls per sec');
-            if (!rateLimited || attempt === 5) throw e;
-            pushBalanceLog(`Rate limited ${w.address} ${t.tokenName}, retry ${attempt}/5`, 'warn');
-            await sleep(attempt * 500);
-          }
-        }
+        const raw = await client.fetchTokenBalance(w.address, t.contractAddress);
         lastCallAt = Date.now();
 
         const balance = Number(raw || '0') / 1e6; // TODO: per-token decimals
@@ -241,7 +233,11 @@ async function runBalancesEtherscanSync({ tokenContract, walletTag } = {}) {
 async function runManualSync() {
   const apiKey = process.env.ETHERSCAN_API_KEY;
   if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not set');
-  const client = makeEtherscanClient({ apiKey, beforeRequest: acquireGlobalEtherscanSlot });
+  const client = makeEtherscanClient({
+    apiKey,
+    beforeRequest: acquireGlobalEtherscanSlot,
+    onRetry: ({ attempt, reason }) => pushSyncLog(`Etherscan retry #${attempt}: ${reason}`, 'warn'),
+  });
 
   const wallets = await prisma.wallet.findMany();
   const whitelist = await prisma.tokenWhitelist.findMany({ where: { chain: 'ethereum' } });
@@ -269,20 +265,7 @@ async function runManualSync() {
       let page = 1;
       let walletEvents = 0;
       while (true) {
-        let response;
-        for (let attempt = 1; attempt <= 5; attempt += 1) {
-          try {
-            response = await client.fetchErc20Transfers(wallet.address, page, PAGE_SIZE);
-            if (attempt > 1) pushSyncLog(`Recovered after retry for ${wallet.address} page=${page} (attempt ${attempt})`, 'warn');
-            break;
-          } catch (e) {
-            const msg = String(e?.message || e).toLowerCase();
-            const rateLimited = msg.includes('rate limit') || msg.includes('max calls per sec');
-            if (!rateLimited || attempt === 5) throw e;
-            pushSyncLog(`Rate limited on ${wallet.address} page=${page}, retry ${attempt}/5`, 'warn');
-            await sleep(attempt * 500);
-          }
-        }
+        const response = await client.fetchErc20Transfers(wallet.address, page, PAGE_SIZE);
 
         lastCallAt = Date.now();
         const result = Array.isArray(response?.result) ? response.result : [];

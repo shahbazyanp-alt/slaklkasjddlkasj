@@ -25,6 +25,9 @@ async function acquireGlobalEtherscanSlot() {
 const client = makeEtherscanClient({
   apiKey: etherscanApiKey,
   beforeRequest: acquireGlobalEtherscanSlot,
+  onRetry: ({ attempt, reason }) => {
+    console.warn(`[worker] etherscan retry #${attempt}: ${reason}`);
+  },
 });
 
 function normalizeAddress(v) {
@@ -44,19 +47,7 @@ async function syncWallet(wallet, whitelistMap) {
   let saved = 0;
 
   while (true) {
-    let response;
-    for (let attempt = 1; attempt <= 5; attempt += 1) {
-      try {
-        response = await client.fetchErc20Transfers(wallet.address, page, PAGE_SIZE);
-        break;
-      } catch (e) {
-        const msg = String(e?.message || e).toLowerCase();
-        const rateLimited = msg.includes('rate limit') || msg.includes('max calls per sec');
-        if (!rateLimited || attempt === 5) throw e;
-        await sleep(attempt * 500);
-      }
-    }
-
+    const response = await client.fetchErc20Transfers(wallet.address, page, PAGE_SIZE);
     const result = Array.isArray(response?.result) ? response.result : [];
     if (!result.length) break;
 
