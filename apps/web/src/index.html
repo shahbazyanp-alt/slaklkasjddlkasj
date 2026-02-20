@@ -69,6 +69,8 @@ import { buildTransfersQuery } from './ui/query.js';
 import { pivotStableRows, sumStableTotals } from './ui/balances.js';
 import { api } from './ui/api-client.js';
 import { createInitialState } from './ui/state.js';
+import { renderOverviewHtml } from './ui/views-overview.js';
+import { renderBalancesLedgerHtml, renderBalancesEtherscanHtml } from './ui/views-balances.js';
 
 const tabs = [
   ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
@@ -178,24 +180,12 @@ function renderOverview(){
   const usdtBalance = sumTokenBalance('USDT');
   const usdcBalance = sumTokenBalance('USDC');
 
-  document.getElementById('view-overview').innerHTML = `
-    <div class="card"><h2>Обзор</h2><div class="muted">Рабочий MVP на реальных API</div></div>
-    <div class="grid2">
-      <div class="card"><div class="muted">Кошельков</div><div class="kpi">${state.wallets.length}</div></div>
-      <div class="card"><div class="muted">Whitelist токенов</div><div class="kpi">${state.whitelist.length}</div></div>
-      <div class="card"><div class="muted">Баланс USDT (Etherscan)</div><div class="kpi ${usdtBalance >= 0 ? 'in' : 'out'}">${fmt(usdtBalance)}</div></div>
-      <div class="card"><div class="muted">Баланс USDC (Etherscan)</div><div class="kpi ${usdcBalance >= 0 ? 'in' : 'out'}">${fmt(usdcBalance)}</div></div>
-    </div>
-    <div class="note" style="margin-bottom:10px">Источник: кеш последнего sync из вкладки balanceEtherscan</div>
-    <div class="card"><div class="row">
-      <button id="manual-sync" class="primary">Запустить поиск транзакций (Etherscan)</button>
-      <div class="progress-wrap">
-        <div class="progress-bar"><div id="sync-progress-fill" class="progress-fill"></div></div>
-      </div>
-      <span class="note" id="sync-note"></span>
-    </div>
-    <div style="margin-top:10px" class="sync-log" id="sync-log"></div>
-    </div>`;
+  document.getElementById('view-overview').innerHTML = renderOverviewHtml({
+    walletsCount: state.wallets.length,
+    whitelistCount: state.whitelist.length,
+    usdtBalance,
+    usdcBalance,
+  });
 
   const note = document.getElementById('sync-note');
   const fill = document.getElementById('sync-progress-fill');
@@ -498,20 +488,15 @@ function renderBalances() {
   const rows = pivotStableRowsForView(state.balances);
   const { totalUsdt, totalUsdc } = sumStableTotals(rows);
 
-  document.getElementById('view-balances-ledger').innerHTML = `
-    <div class="card"><h2>balanceLedger</h2><div class="muted">Расчётный баланс по ledger (вход - выход) в нашей БД.</div></div>
-    <div class="card"><div class="row">
-      <select id="b-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.balanceFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
-      <select id="b-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.balanceFilters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
-      <button id="b-sort-toggle">Сортировка: ${state.balanceSort === 'asc' ? 'по возрастанию' : 'по убыванию'}</button>
-      <button id="b-apply">Применить</button>
-      <button id="b-refresh">Обновить</button>
-    </div></div>
-    <div class="card"><table>
-      <thead><tr><th>Номер кошелька</th><th>Кошелёк</th><th>USDT</th><th>USDC</th></tr></thead>
-      <tbody>${rows.map(r => `<tr><td>${r.walletNumber || ''}</td><td>${r.walletAddress}</td><td>${fmt(r.usdt)}</td><td>${fmt(r.usdc)}</td></tr>`).join('')}</tbody>
-      <tfoot><tr><th colspan="2">Итого</th><th>${fmt(totalUsdt)}</th><th>${fmt(totalUsdc)}</th></tr></tfoot>
-    </table></div>`;
+  document.getElementById('view-balances-ledger').innerHTML = renderBalancesLedgerHtml({
+    rows,
+    totalUsdt,
+    totalUsdc,
+    whitelist: state.whitelist,
+    tags: state.tags,
+    balanceFilters: state.balanceFilters,
+    balanceSort: state.balanceSort,
+  });
 
   document.getElementById('b-sort-toggle').onclick = async () => {
     state.balanceSort = state.balanceSort === 'asc' ? 'desc' : 'asc';
@@ -579,25 +564,15 @@ function renderBalancesEtherscan() {
   const rows = pivotStableRowsForView(state.balancesEtherscan);
   const { totalUsdt, totalUsdc } = sumStableTotals(rows);
 
-  document.getElementById('view-balances-etherscan').innerHTML = `
-    <div class="card"><h2>balanceEtherscan</h2><div class="muted">Текущий баланс из Etherscan API (только данные Etherscan sync).</div></div>
-    <div class="card"><div class="row">
-      <select id="be-token"><option value="">Все токены</option>${state.whitelist.map(t => `<option value="${t.contractAddress}" ${state.balanceFilters.tokenContract === t.contractAddress ? 'selected' : ''}>${t.tokenName}</option>`).join('')}</select>
-      <select id="be-tag"><option value="">Все теги</option>${state.tags.map(t => `<option value="${t.tag}" ${state.balanceFilters.walletTag === t.tag ? 'selected' : ''}>${t.tag}</option>`).join('')}</select>
-      <button id="be-sort-toggle">Сортировка: ${state.balanceSort === 'asc' ? 'по возрастанию' : 'по убыванию'}</button>
-      <button id="be-apply">Применить</button>
-      <button id="be-refresh">Обновить</button>
-      <button id="be-sync" class="primary">Запросить балансы из Etherscan</button>
-      <div class="progress-wrap"><div class="progress-bar"><div id="be-sync-fill" class="progress-fill"></div></div></div>
-      <span id="be-sync-note" class="note"></span>
-    </div>
-    <div style="margin-top:10px" class="sync-log" id="be-sync-log"></div>
-    </div>
-    <div class="card"><table>
-      <thead><tr><th>Номер кошелька</th><th>Кошелёк</th><th>USDT</th><th>USDC</th></tr></thead>
-      <tbody>${rows.map(r => `<tr><td>${r.walletNumber || ''}</td><td>${r.walletAddress}</td><td>${fmt(r.usdt)}</td><td>${fmt(r.usdc)}</td></tr>`).join('')}</tbody>
-      <tfoot><tr><th colspan="2">Итого</th><th>${fmt(totalUsdt)}</th><th>${fmt(totalUsdc)}</th></tr></tfoot>
-    </table></div>`;
+  document.getElementById('view-balances-etherscan').innerHTML = renderBalancesEtherscanHtml({
+    rows,
+    totalUsdt,
+    totalUsdc,
+    whitelist: state.whitelist,
+    tags: state.tags,
+    balanceFilters: state.balanceFilters,
+    balanceSort: state.balanceSort,
+  });
 
   document.getElementById('be-sort-toggle').onclick = async () => {
     state.balanceSort = state.balanceSort === 'asc' ? 'desc' : 'asc';
