@@ -37,8 +37,10 @@ services:
       - key: SESSION_SECRET
         generateValue: true
       - key: GOOGLE_CLIENT_ID
-        sync: false
+        value: "624067149330-n1eg575v651155negve5bfnre652m9lr.apps.googleusercontent.com"
       - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET_V2
         sync: false
       - key: GOOGLE_REDIRECT_URI
         value: "https://tracker-web-9d6e.onrender.com/auth/google/callback"

@@ -10,7 +10,7 @@ const html = readFileSync(join(import.meta.dirname, 'index.html'), 'utf8');
 
 const APP_URL = (process.env.APP_URL || '').trim();
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
-const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET_V2 || '').trim();
 const GOOGLE_REDIRECT_URI = (process.env.GOOGLE_REDIRECT_URI || '').trim();
 const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim();
 const SESSION_COOKIE = 'tracker_session';
