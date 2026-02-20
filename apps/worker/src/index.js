@@ -12,7 +12,20 @@ if (!etherscanApiKey) {
   process.exit(1);
 }
 
-const client = makeEtherscanClient({ apiKey: etherscanApiKey });
+const GLOBAL_ETHERSCAN_LOCK_ID = 88442211;
+
+async function acquireGlobalEtherscanSlot() {
+  const delaySec = ETHERSCAN_MIN_INTERVAL_MS / 1000;
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${GLOBAL_ETHERSCAN_LOCK_ID})`);
+    await tx.$executeRawUnsafe(`SELECT pg_sleep(${delaySec})`);
+  });
+}
+
+const client = makeEtherscanClient({
+  apiKey: etherscanApiKey,
+  beforeRequest: acquireGlobalEtherscanSlot,
+});
 
 function normalizeAddress(v) {
   return String(v || '').toLowerCase();

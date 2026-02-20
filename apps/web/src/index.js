@@ -151,13 +151,23 @@ function normalizeAmount(raw, decimals) {
 
 const ETHERSCAN_RPS = Math.max(1, Number(process.env.ETHERSCAN_RPS || 5));
 const ETHERSCAN_MIN_INTERVAL_MS = Math.ceil(1000 / ETHERSCAN_RPS);
+const GLOBAL_ETHERSCAN_LOCK_ID = 88442211;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function acquireGlobalEtherscanSlot() {
+  const delaySec = ETHERSCAN_MIN_INTERVAL_MS / 1000;
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(${GLOBAL_ETHERSCAN_LOCK_ID})`);
+    await tx.$executeRawUnsafe(`SELECT pg_sleep(${delaySec})`);
+  });
+}
+
 
 async function runBalancesEtherscanSync({ tokenContract, walletTag } = {}) {
   const apiKey = process.env.ETHERSCAN_API_KEY;
   if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not set');
-  const client = makeEtherscanClient({ apiKey });
+  const client = makeEtherscanClient({ apiKey, beforeRequest: acquireGlobalEtherscanSlot });
 
   const wallets = await prisma.wallet.findMany({
     where: walletTag ? { tags: { some: { tag: walletTag } } } : undefined,
@@ -231,7 +241,7 @@ async function runBalancesEtherscanSync({ tokenContract, walletTag } = {}) {
 async function runManualSync() {
   const apiKey = process.env.ETHERSCAN_API_KEY;
   if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not set');
-  const client = makeEtherscanClient({ apiKey });
+  const client = makeEtherscanClient({ apiKey, beforeRequest: acquireGlobalEtherscanSlot });
 
   const wallets = await prisma.wallet.findMany();
   const whitelist = await prisma.tokenWhitelist.findMany({ where: { chain: 'ethereum' } });

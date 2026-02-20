@@ -1,7 +1,8 @@
-export function makeEtherscanClient({ apiKey, baseUrl = 'https://api.etherscan.io/v2/api', chainId = 1 }) {
+export function makeEtherscanClient({ apiKey, baseUrl = 'https://api.etherscan.io/v2/api', chainId = 1, beforeRequest = null }) {
   if (!apiKey) throw new Error('ETHERSCAN_API_KEY is required');
 
   async function call(params) {
+    if (beforeRequest) await beforeRequest();
     const url = new URL(baseUrl);
     url.searchParams.set('chainid', String(chainId));
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)));
