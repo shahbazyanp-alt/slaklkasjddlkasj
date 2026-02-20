@@ -24,6 +24,12 @@ const SESSION_SECRET = cleanEnv(process.env.SESSION_SECRET);
 const SESSION_COOKIE = 'tracker_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 const oauthStateStore = new Map();
+const ADMIN_EMAILS = new Set(
+  String(process.env.ADMIN_EMAILS || 'prepregardo@gmail.com')
+    .split(',')
+    .map((x) => x.trim().toLowerCase())
+    .filter(Boolean),
+);
 
 function parseCookies(req) {
   const raw = req.headers.cookie || '';
@@ -465,13 +471,16 @@ async function handleGoogleAuthCallback(req, res) {
       return res.end();
     }
 
+    const normalizedEmail = String(profile.email).toLowerCase();
+    const grantedRole = ADMIN_EMAILS.has(normalizedEmail) ? 'admin' : 'read_only';
+
     const user = await prisma.user.upsert({
-      where: { email: String(profile.email).toLowerCase() },
-      update: {},
+      where: { email: normalizedEmail },
+      update: { role: grantedRole },
       create: {
-        email: String(profile.email).toLowerCase(),
+        email: normalizedEmail,
         passwordHash: 'oauth_google',
-        role: 'read_only',
+        role: grantedRole,
       },
     });
 
