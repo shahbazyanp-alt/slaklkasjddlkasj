@@ -185,21 +185,26 @@ function tokenOptions(optionsId) {
 }
 
 function renderOverview(){
-  const tokenNet = (symbol) => state.transfers
-    .filter((t) => String(t.tokenSymbol || '').toUpperCase() === symbol || String(t.tokenName || '').toUpperCase() === symbol)
-    .reduce((s, t) => s + (t.direction === 'incoming' ? Number(t.amountNormalized || 0) : -Number(t.amountNormalized || 0)), 0);
+  const sumTokenBalance = (symbol) => (state.balancesEtherscan || [])
+    .filter((r) => {
+      const tokenName = String(r.tokenName || '').toUpperCase();
+      const tokenContract = String(r.tokenContract || '').toUpperCase();
+      return tokenName.includes(symbol) || tokenContract.includes(symbol);
+    })
+    .reduce((s, r) => s + Number(r.balance || 0), 0);
 
-  const usdtBalance = tokenNet('USDT');
-  const usdcBalance = tokenNet('USDC');
+  const usdtBalance = sumTokenBalance('USDT');
+  const usdcBalance = sumTokenBalance('USDC');
 
   document.getElementById('view-overview').innerHTML = `
     <div class="card"><h2>Обзор</h2><div class="muted">Рабочий MVP на реальных API</div></div>
     <div class="grid2">
       <div class="card"><div class="muted">Кошельков</div><div class="kpi">${state.wallets.length}</div></div>
       <div class="card"><div class="muted">Whitelist токенов</div><div class="kpi">${state.whitelist.length}</div></div>
-      <div class="card"><div class="muted">Баланс USDT</div><div class="kpi ${usdtBalance >= 0 ? 'in' : 'out'}">${fmt(usdtBalance)}</div></div>
-      <div class="card"><div class="muted">Баланс USDC</div><div class="kpi ${usdcBalance >= 0 ? 'in' : 'out'}">${fmt(usdcBalance)}</div></div>
+      <div class="card"><div class="muted">Баланс USDT (Etherscan)</div><div class="kpi ${usdtBalance >= 0 ? 'in' : 'out'}">${fmt(usdtBalance)}</div></div>
+      <div class="card"><div class="muted">Баланс USDC (Etherscan)</div><div class="kpi ${usdcBalance >= 0 ? 'in' : 'out'}">${fmt(usdcBalance)}</div></div>
     </div>
+    <div class="note" style="margin-bottom:10px">Источник: кеш последнего sync из вкладки balanceEtherscan</div>
     <div class="card"><div class="row">
       <button id="manual-sync" class="primary">Запустить поиск транзакций (Etherscan)</button>
       <div class="progress-wrap">
@@ -696,6 +701,7 @@ async function refreshAll() {
   state.tags = await api('/api/tags');
   const q = buildQueryFromFilters(state.filters);
   state.transfers = await api('/api/transfers' + (q ? '?' + q : ''));
+  state.balancesEtherscan = await api('/api/balances/etherscan');
 }
 
 (async function init() {
