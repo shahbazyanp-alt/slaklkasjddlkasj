@@ -282,6 +282,7 @@ async function runManualSync() {
           const from = normalizeAddress(tx.from);
           const to = normalizeAddress(tx.to);
           const walletAddr = normalizeAddress(wallet.address);
+          if (from === walletAddr && to === walletAddr) continue;
           const direction = to === walletAddr ? 'incoming' : from === walletAddr ? 'outgoing' : null;
           if (!direction) continue;
 
