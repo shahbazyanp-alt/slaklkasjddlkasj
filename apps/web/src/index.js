@@ -6,6 +6,15 @@ import { prisma } from '../../../packages/db/src/index.js';
 import { makeEtherscanClient } from '../../../packages/etherscan-client/src/index.js';
 import { normalizeAddress, syncWalletTransfers } from '../../../packages/sync-engine/src/index.js';
 import { createSyncState, pushStateLog } from './lib/sync-state.js';
+import {
+  badRequest,
+  requireString,
+  optionalString,
+  stringArray,
+  unique,
+  assertEthereumAddress,
+  asTrimmedString,
+} from './lib/validate.js';
 
 const port = process.env.PORT || 3000;
 const html = readFileSync(join(import.meta.dirname, 'index.html'), 'utf8');
@@ -439,11 +448,10 @@ async function handleApi(req, res) {
 
   if (req.method === 'POST' && url.pathname === '/api/wallets') {
     const body = await readJsonBody(req);
-    const address = String(body.address || '').trim();
-    const label = body.label ? String(body.label).trim() : null;
-    const walletNumber = body.walletNumber ? String(body.walletNumber).trim() : null;
-    const tags = Array.isArray(body.tags) ? body.tags.map((t) => String(t).trim()).filter(Boolean) : [];
-    if (!address) return sendJson(res, 400, { error: 'address is required' });
+    const address = assertEthereumAddress(requireString(body.address, 'address'));
+    const label = optionalString(body.label);
+    const walletNumber = optionalString(body.walletNumber);
+    const tags = unique(stringArray(body.tags));
 
     const created = await prisma.wallet.create({
       data: {
@@ -458,17 +466,15 @@ async function handleApi(req, res) {
   }
 
   if (req.method === 'DELETE' && url.pathname === '/api/wallets') {
-    const id = String(url.searchParams.get('id') || '').trim();
-    if (!id) return sendJson(res, 400, { error: 'id is required' });
+    const id = requireString(url.searchParams.get('id'), 'id');
     await prisma.wallet.delete({ where: { id } });
     return sendJson(res, 200, { ok: true });
   }
 
   if (req.method === 'PUT' && url.pathname === '/api/wallets/number') {
     const body = await readJsonBody(req);
-    const id = String(body.id || '').trim();
-    const walletNumber = body.walletNumber ? String(body.walletNumber).trim() : null;
-    if (!id) return sendJson(res, 400, { error: 'id is required' });
+    const id = requireString(body.id, 'id');
+    const walletNumber = optionalString(body.walletNumber);
     const updated = await prisma.wallet.update({
       where: { id },
       data: { walletNumber },
@@ -479,20 +485,20 @@ async function handleApi(req, res) {
 
   if (req.method === 'POST' && url.pathname === '/api/wallets/bulk') {
     const body = await readJsonBody(req);
-    const raw = String(body.addresses || '');
+    const raw = asTrimmedString(body.addresses);
+    if (!raw) throw badRequest('addresses is required');
+
     const addresses = raw
       .split(/[\n,;\s]+/g)
       .map((x) => x.trim())
       .filter(Boolean);
 
-    if (!addresses.length) return sendJson(res, 400, { error: 'addresses is required' });
-
-    const unique = [...new Set(addresses)];
-    const valid = unique.filter((a) => /^0x[a-fA-F0-9]{40}$/.test(a));
-    const invalid = unique.filter((a) => !/^0x[a-fA-F0-9]{40}$/.test(a));
+    const deduped = unique(addresses);
+    const valid = deduped.filter((a) => /^0x[a-fA-F0-9]{40}$/.test(a));
+    const invalid = deduped.filter((a) => !/^0x[a-fA-F0-9]{40}$/.test(a));
 
     if (!valid.length) {
-      return sendJson(res, 400, { error: 'no valid ethereum addresses found', invalid });
+      throw badRequest('no valid ethereum addresses found', { invalid });
     }
 
     const existing = await prisma.wallet.findMany({
@@ -511,7 +517,7 @@ async function handleApi(req, res) {
     return sendJson(res, 200, {
       ok: true,
       input: addresses.length,
-      unique: unique.length,
+      unique: deduped.length,
       created: toCreate.length,
       skippedExisting: valid.length - toCreate.length,
       invalid,
@@ -530,10 +536,9 @@ async function handleApi(req, res) {
 
   if (req.method === 'POST' && url.pathname === '/api/tags/assign') {
     const body = await readJsonBody(req);
-    const tag = String(body.tag || '').trim();
-    const walletIds = Array.isArray(body.walletIds) ? body.walletIds.map((x) => String(x).trim()).filter(Boolean) : [];
-    if (!tag) return sendJson(res, 400, { error: 'tag is required' });
-    if (!walletIds.length) return sendJson(res, 400, { error: 'walletIds is required' });
+    const tag = requireString(body.tag, 'tag');
+    const walletIds = unique(stringArray(body.walletIds));
+    if (!walletIds.length) throw badRequest('walletIds is required');
 
     let assigned = 0;
     for (const walletId of walletIds) {
@@ -556,11 +561,8 @@ async function handleApi(req, res) {
 
   if (req.method === 'POST' && url.pathname === '/api/whitelist') {
     const body = await readJsonBody(req);
-    const contractAddress = String(body.contractAddress || '').trim();
-    const tokenName = String(body.tokenName || '').trim();
-    if (!contractAddress || !tokenName) {
-      return sendJson(res, 400, { error: 'contractAddress and tokenName are required' });
-    }
+    const contractAddress = assertEthereumAddress(requireString(body.contractAddress, 'contractAddress'), 'contractAddress');
+    const tokenName = requireString(body.tokenName, 'tokenName');
 
     const created = await prisma.tokenWhitelist.create({
       data: { contractAddress, tokenName, chain: 'ethereum' },
@@ -660,7 +662,11 @@ async function handleApi(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/balances/etherscan/sync') {
     if (balanceSyncState.running) return sendJson(res, 200, { ok: true, started: false, message: 'already running' });
     const body = await readJsonBody(req);
-    runBalancesEtherscanSync({ tokenContract: body.tokenContract || '', walletTag: body.walletTag || '' }).catch((e) => {
+    const tokenContract = optionalString(body.tokenContract) || '';
+    const walletTag = optionalString(body.walletTag) || '';
+    if (tokenContract) assertEthereumAddress(tokenContract, 'tokenContract');
+
+    runBalancesEtherscanSync({ tokenContract, walletTag }).catch((e) => {
       console.error('balance sync failed', e);
     });
     return sendJson(res, 202, { ok: true, started: true });
@@ -784,6 +790,9 @@ http
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
     } catch (error) {
+      if (error?.status === 400) {
+        return sendJson(res, 400, { error: String(error?.message || error), details: error?.details });
+      }
       console.error(error);
       sendJson(res, 500, { error: String(error?.message || error) });
     }
