@@ -26,12 +26,34 @@ MVP dashboard for tracking incoming/outgoing ERC-20 transfers across many wallet
 - `packages/reporting` — summary/export logic
 - `packages/db` — Prisma schema and migrations
 
-## Runbook (planned)
+## Runbook (local)
 
 1. Configure env variables (`ETHERSCAN_API_KEY`, `DATABASE_URL`, `REDIS_URL`)
 2. Run database migrations
 3. Start web service
 4. Start worker service
+
+## Deploy on Render (no custom domain)
+
+This repository includes `render.yaml` blueprint for:
+- `tracker-web` (public web service)
+- `tracker-worker` (background sync)
+- `tracker-postgres` (managed Postgres)
+- `tracker-redis` (managed Redis)
+
+### Steps
+
+1. Push this repo to GitHub/GitLab.
+2. In Render: **New + → Blueprint** and select the repo.
+3. Set required secret env var:
+   - `ETHERSCAN_API_KEY`
+4. Create the blueprint.
+
+Render will provide URL like:
+- `https://tracker-web.onrender.com`
+
+Healthcheck endpoint:
+- `/health`
 
 ## Deduplication rule
 
