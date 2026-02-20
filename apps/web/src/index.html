@@ -67,35 +67,15 @@
 import { fmt } from './ui/format.js';
 import { buildTransfersQuery } from './ui/query.js';
 import { pivotStableRows, sumStableTotals } from './ui/balances.js';
+import { api } from './ui/api-client.js';
+import { createInitialState } from './ui/state.js';
 
 const tabs = [
   ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
   ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки']
 ];
 
-const state = {
-  wallets: [],
-  whitelist: [],
-  transfers: [],
-  tags: [],
-  balances: [],
-  balancesEtherscan: [],
-  summaryMode: 'token',
-  filters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '', walletTag: '', includeSpam: false },
-  balanceFilters: { tokenContract: '', walletTag: '' },
-  balanceSort: 'asc',
-};
-
-async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  });
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new Error(data?.error || ('HTTP ' + res.status));
-  return data;
-}
+const state = createInitialState();
 
 async function pollSyncStatus(onTick) {
   while (true) {
