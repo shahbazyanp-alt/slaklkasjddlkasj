@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { prisma } from '../../../packages/db/src/index.js';
 import { makeEtherscanClient } from '../../../packages/etherscan-client/src/index.js';
 import { normalizeAddress, syncWalletTransfers } from '../../../packages/sync-engine/src/index.js';
+import { createSyncState, pushStateLog } from './lib/sync-state.js';
 
 const port = process.env.PORT || 3000;
 const html = readFileSync(join(import.meta.dirname, 'index.html'), 'utf8');
@@ -88,37 +89,25 @@ function cleanupOauthState() {
   }
 }
 
-const syncState = {
-  running: false,
+const syncState = createSyncState({
   totalWallets: 0,
   processedWallets: 0,
   inserted: 0,
-  startedAt: null,
-  finishedAt: null,
-  error: null,
-  logs: [],
-};
+});
 
-const balanceSyncState = {
-  running: false,
+const balanceSyncState = createSyncState({
   total: 0,
   processed: 0,
-  startedAt: null,
-  finishedAt: null,
-  error: null,
-  logs: [],
-};
+});
 
 let etherscanBalancesCache = [];
 
 function pushBalanceLog(message, level = 'info') {
-  balanceSyncState.logs.push({ ts: new Date().toISOString(), level, message });
-  if (balanceSyncState.logs.length > 300) balanceSyncState.logs.splice(0, balanceSyncState.logs.length - 300);
+  pushStateLog(balanceSyncState, message, level);
 }
 
 function pushSyncLog(message, level = 'info') {
-  syncState.logs.push({ ts: new Date().toISOString(), level, message });
-  if (syncState.logs.length > 300) syncState.logs.splice(0, syncState.logs.length - 300);
+  pushStateLog(syncState, message, level);
 }
 
 function sendJson(res, status, payload) {
