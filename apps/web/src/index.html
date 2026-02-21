@@ -63,6 +63,7 @@
       <section id="view-tests" class="view hidden"></section>
       <section id="view-tests-2" class="view hidden"></section>
       <section id="view-tests-3" class="view hidden"></section>
+      <section id="view-tests-4" class="view hidden"></section>
     </main>
   </div>
 
@@ -77,7 +78,7 @@ import { renderBalancesLedgerHtml, renderBalancesEtherscanHtml } from './ui/view
 
 const tabs = [
   ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
-  ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки'], ['tests','Тесты'], ['tests-2','Тесты 2'], ['tests-3','Тесты 3']
+  ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки'], ['tests','Тесты'], ['tests-2','Тесты 2'], ['tests-3','Тесты 3'], ['tests-4','Тесты 4']
 ];
 
 const state = createInitialState();
@@ -161,6 +162,9 @@ async function setTab(tab){
   }
   if (tab === 'tests-3') {
     renderTests3();
+  }
+  if (tab === 'tests-4') {
+    renderTests4();
   }
 }
 
@@ -810,6 +814,55 @@ USDT,Tether USD,0xdAC17...,6"></textarea>
         <button class="primary">Импортировать</button>
         <button>Скачать шаблон CSV</button>
       </div>
+    </div>
+  `;
+}
+
+function renderTests4(){
+  document.getElementById('view-tests-4').innerHTML = `
+    <div class="card"><h2>Тесты 4</h2><div class="muted">Макет мультисетевого раздела «Транзакции» (Все сети / ERC20 / TRC20)</div></div>
+
+    <div class="card"><h3>Режим транзакций</h3>
+      <div class="row">
+        <button class="primary">Все сети</button>
+        <button>Транзакции ERC20</button>
+        <button>Транзакции TRC20</button>
+        <span class="note">Режим влияет на источник данных, кнопку поиска и таблицу.</span>
+      </div>
+    </div>
+
+    <div class="card"><h3>Действия синка</h3>
+      <div class="row">
+        <button class="primary">Искать во всех сетях</button>
+        <button>Искать в ERC20</button>
+        <button>Искать в TRC20</button>
+      </div>
+      <div class="note" style="margin-top:8px">В режиме «Все сети» запускаем параллельно запросы в Etherscan API и TronScan API.</div>
+      <div class="note">Статус: ERC20 sync ✅ • TRC20 sync ✅ • merged view ✅</div>
+    </div>
+
+    <div class="card"><h3>Фильтры (как сейчас, без изменений)</h3>
+      <div class="row">
+        <input placeholder="Кошелёк / адрес" style="min-width:220px" />
+        <select><option selected>Token: Все</option><option>USDT</option><option>USDC</option></select>
+        <select><option selected>Direction: Все</option><option>incoming</option><option>outgoing</option></select>
+        <input placeholder="Date from" style="min-width:140px" />
+        <input placeholder="Date to" style="min-width:140px" />
+        <button>Применить</button>
+      </div>
+      <div class="note" style="margin-top:8px">Фильтры одинаковые для всех режимов; меняется только source/scope.</div>
+    </div>
+
+    <div class="card"><h3>Таблица транзакций (пример: Все сети)</h3>
+      <table>
+        <thead><tr><th>Сеть</th><th>TxHash</th><th>Кошелёк</th><th>Token</th><th>Direction</th><th>Amount</th><th>Время</th></tr></thead>
+        <tbody>
+          <tr><td>ERC20</td><td>0xa76d...eeaf</td><td>0x50F5...d1FF</td><td>USDT</td><td>incoming</td><td>12 500</td><td>21.02 15:56</td></tr>
+          <tr><td>TRC20</td><td>9f4c...ab12</td><td>TQ9y...X2k1</td><td>USDT</td><td>outgoing</td><td>3 200</td><td>21.02 15:55</td></tr>
+          <tr><td>ERC20</td><td>0x1be3...9944</td><td>0x01be...0405</td><td>USDC</td><td>incoming</td><td>500</td><td>21.02 15:53</td></tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:8px">В режимах ERC20/TRC20 таблица показывает только выбранную сеть.</div>
     </div>
   `;
 }
