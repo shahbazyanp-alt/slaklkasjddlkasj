@@ -196,7 +196,7 @@ async function runBalancesEtherscanSync({ tokenContract, walletTag } = {}) {
     orderBy: { createdAt: 'asc' },
   });
   const whitelist = await prisma.tokenWhitelist.findMany({
-    where: { chain: 'ethereum', ...(tokenContract ? { contractAddress: tokenContract } : {}) },
+    where: { network: 'ERC20', ...(tokenContract ? { contractAddress: tokenContract } : {}) },
     orderBy: { createdAt: 'asc' },
   });
 
@@ -271,7 +271,7 @@ async function runManualSync() {
   });
 
   const wallets = await prisma.wallet.findMany();
-  const whitelist = await prisma.tokenWhitelist.findMany({ where: { chain: 'ethereum' } });
+  const whitelist = await prisma.tokenWhitelist.findMany({ where: { network: 'ERC20' } });
   const whitelistMap = new Map(whitelist.map((x) => [normalizeAddress(x.contractAddress), x]));
 
   syncState.running = true;
@@ -721,7 +721,7 @@ async function handleApi(req, res) {
     const tokenName = requireString(body.tokenName, 'tokenName');
 
     const created = await prisma.tokenWhitelist.create({
-      data: { contractAddress, tokenName, chain: 'ethereum' },
+      data: { contractAddress, tokenName, network: 'ERC20' },
     });
     return sendJson(res, 201, created);
   }

@@ -54,7 +54,7 @@ export async function syncWalletTransfers({
         await prisma.erc20Transfer.create({
           data: {
             walletId: wallet.id,
-            chain: 'ethereum',
+            network: 'ERC20',
             txHash: String(tx.hash),
             logIndex: Number(tx.logIndex || 0),
             blockNumber: BigInt(tx.blockNumber || 0),

@@ -34,7 +34,7 @@ const client = makeEtherscanClient({
 
 async function runSyncTick() {
   const wallets = await prisma.wallet.findMany();
-  const whitelist = await prisma.tokenWhitelist.findMany({ where: { chain: 'ethereum' } });
+  const whitelist = await prisma.tokenWhitelist.findMany({ where: { network: 'ERC20' } });
   const whitelistMap = new Map(whitelist.map((x) => [normalizeAddress(x.contractAddress), x]));
 
   let total = 0;

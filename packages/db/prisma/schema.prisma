@@ -17,6 +17,11 @@ enum TransferDirection {
   outgoing
 }
 
+enum Network {
+  ERC20
+  TRC20
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -28,8 +33,9 @@ model User {
 
 model Wallet {
   id                String                   @id @default(cuid())
-  address           String                   @unique
-  walletNumber      String?                  @unique
+  network           Network                  @default(ERC20)
+  address           String
+  walletNumber      String?
   label             String?
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
@@ -37,6 +43,9 @@ model Wallet {
   transfers         Erc20Transfer[]
   syncState         WalletSyncState?
   etherscanBalances EtherscanTokenBalance[]
+
+  @@unique([network, address])
+  @@unique([network, walletNumber])
 }
 
 model WalletTag {
@@ -52,17 +61,19 @@ model WalletTag {
 
 model TokenWhitelist {
   id              String   @id @default(cuid())
-  chain           String   @default("ethereum")
-  contractAddress String   @unique
+  network         Network  @default(ERC20)
+  contractAddress String
   tokenName       String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@unique([network, contractAddress])
 }
 
 model Erc20Transfer {
   id                 String            @id @default(cuid())
   walletId           String
-  chain              String            @default("ethereum")
+  network            Network           @default(ERC20)
   txHash             String
   logIndex           Int
   blockNumber        BigInt
