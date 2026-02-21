@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { prisma } from '../../../packages/db/src/index.js';
 import { makeEtherscanClient } from '../../../packages/etherscan-client/src/index.js';
-import { normalizeAddress } from '../../../packages/sync-engine/src/index.js';
+import { normalizeAddress, syncWalletTransfers } from '../../../packages/sync-engine/src/index.js';
 import { createSyncState, pushStateLog } from './lib/sync-state.js';
 import {
   badRequest,
@@ -119,6 +119,12 @@ function tryServeStaticModule(urlPath, res) {
   }
 }
 
+const syncState = createSyncState({
+  totalWallets: 0,
+  processedWallets: 0,
+  inserted: 0,
+});
+
 const balanceSyncState = createSyncState({
   total: 0,
   processed: 0,
@@ -127,6 +133,10 @@ const balanceSyncState = createSyncState({
 
 function pushBalanceLog(message, level = 'info') {
   pushStateLog(balanceSyncState, message, level);
+}
+
+function pushSyncLog(message, level = 'info') {
+  pushStateLog(syncState, message, level);
 }
 
 function sendJson(res, status, payload) {
@@ -248,6 +258,66 @@ async function runBalancesEtherscanSync({ tokenContract, walletTag } = {}) {
     throw error;
   } finally {
     balanceSyncState.running = false;
+  }
+}
+
+async function runManualSync() {
+  const apiKey = process.env.ETHERSCAN_API_KEY;
+  if (!apiKey) throw new Error('ETHERSCAN_API_KEY is not set');
+  const client = makeEtherscanClient({
+    apiKey,
+    beforeRequest: acquireGlobalEtherscanSlot,
+    onRetry: ({ attempt, reason }) => pushSyncLog(`Etherscan retry #${attempt}: ${reason}`, 'warn'),
+  });
+
+  const wallets = await prisma.wallet.findMany();
+  const whitelist = await prisma.tokenWhitelist.findMany({ where: { chain: 'ethereum' } });
+  const whitelistMap = new Map(whitelist.map((x) => [normalizeAddress(x.contractAddress), x]));
+
+  syncState.running = true;
+  syncState.startedAt = new Date().toISOString();
+  syncState.finishedAt = null;
+  syncState.error = null;
+  syncState.totalWallets = wallets.length;
+  syncState.processedWallets = 0;
+  syncState.inserted = 0;
+  syncState.logs = [];
+  pushSyncLog(`Sync started. Wallets in queue: ${wallets.length}`);
+
+  try {
+    let lastCallAt = 0;
+    for (const wallet of wallets) {
+      pushSyncLog(`Processing wallet ${wallet.address}`);
+      const now = Date.now();
+      const wait = Math.max(0, ETHERSCAN_MIN_INTERVAL_MS - (now - lastCallAt));
+      if (wait > 0) await sleep(wait);
+
+      const result = await syncWalletTransfers({
+        prisma,
+        client,
+        wallet,
+        whitelistMap,
+        onPage: ({ page, walletEvents }) => {
+          pushSyncLog(`Wallet ${wallet.address}: scanned page ${page}, events so far ${walletEvents}`);
+        },
+      });
+
+      lastCallAt = Date.now();
+      syncState.inserted += result.inserted;
+      syncState.processedWallets += 1;
+      pushSyncLog(`Wallet done ${wallet.address}. Progress ${syncState.processedWallets}/${syncState.totalWallets}, inserted +${syncState.inserted}`);
+    }
+
+    syncState.finishedAt = new Date().toISOString();
+    pushSyncLog(`Sync finished successfully. Total inserted: ${syncState.inserted}`);
+    return { wallets: wallets.length, inserted: syncState.inserted };
+  } catch (error) {
+    syncState.error = String(error?.message || error);
+    syncState.finishedAt = new Date().toISOString();
+    pushSyncLog(`Sync failed: ${syncState.error}`, 'error');
+    throw error;
+  } finally {
+    syncState.running = false;
   }
 }
 
@@ -571,6 +641,23 @@ async function handleApi(req, res) {
     return sendJson(res, 200, items);
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/sync/trigger') {
+    if (syncState.running) {
+      pushSyncLog('Sync trigger ignored: already running', 'warn');
+      return sendJson(res, 200, { ok: true, started: false, message: 'sync already running' });
+    }
+    runManualSync().catch((e) => {
+      console.error('sync failed', e);
+    });
+    return sendJson(res, 202, { ok: true, started: true });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/sync/status') {
+    const progress = syncState.totalWallets > 0
+      ? Math.round((syncState.processedWallets / syncState.totalWallets) * 100)
+      : 0;
+    return sendJson(res, 200, { ...syncState, progress });
+  }
 
   // balances (ledger)
   if (req.method === 'GET' && url.pathname === '/api/balances') {
