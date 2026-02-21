@@ -675,7 +675,17 @@ function renderTests(){
       </div>
     </div>
 
-    <div class="card"><h3>Сводка по сетям — USDT</h3>
+    <div class="card"><h3>Быстрые действия (Overview)</h3>
+      <div class="row">
+        <button>Обновить ERC</button>
+        <button>Обновить TRC</button>
+        <button class="primary">Обновить всё</button>
+      </div>
+      <div class="note" style="margin-top:8px">В проде: независимые статусы синка по каждой сети + общий агрегат.</div>
+    </div>
+
+
+    <div class="card"><h3>Макет вкладки «Сводка» — USDT</h3>
       <table>
         <thead><tr><th>Сеть</th><th>Вход</th><th>Выход</th><th>Итого</th><th>Статус sync</th></tr></thead>
         <tbody>
@@ -686,7 +696,7 @@ function renderTests(){
       </table>
     </div>
 
-    <div class="card"><h3>Сводка по сетям — USDC</h3>
+    <div class="card"><h3>Макет вкладки «Сводка» — USDC</h3>
       <table>
         <thead><tr><th>Сеть</th><th>Вход</th><th>Выход</th><th>Итого</th><th>Статус sync</th></tr></thead>
         <tbody>
@@ -695,15 +705,6 @@ function renderTests(){
           <tr><td><b>Итого USDC</b></td><td><b>14 574,68</b></td><td><b>14 574,68</b></td><td><b>0</b></td><td>—</td></tr>
         </tbody>
       </table>
-    </div>
-
-    <div class="card"><h3>Быстрые действия (Overview)</h3>
-      <div class="row">
-        <button>Обновить ERC</button>
-        <button>Обновить TRC</button>
-        <button class="primary">Обновить всё</button>
-      </div>
-      <div class="note" style="margin-top:8px">В проде: независимые статусы синка по каждой сети + общий агрегат.</div>
     </div>
   `;
 }
