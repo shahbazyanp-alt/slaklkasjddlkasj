@@ -157,6 +157,14 @@ function parseDate(value) {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
+function isSelfTransferForWallet(t) {
+  const walletAddr = normalizeAddress(t?.wallet?.address);
+  if (!walletAddr) return false;
+  const from = normalizeAddress(t?.fromAddress);
+  const to = normalizeAddress(t?.toAddress);
+  return from === walletAddr && to === walletAddr;
+}
+
 // normalizeAddress/normalizeAmount moved to @tracker/sync-engine
 
 const ETHERSCAN_RPS = Math.max(1, Number(process.env.ETHERSCAN_RPS || 5));
@@ -670,6 +678,7 @@ async function handleApi(req, res) {
 
     const map = new Map();
     for (const t of transfers) {
+      if (isSelfTransferForWallet(t)) continue;
       const key = `${t.wallet.address}:${t.tokenContract.toLowerCase()}`;
       const prev = map.get(key) || {
         walletAddress: t.wallet.address,
@@ -767,6 +776,7 @@ async function handleApi(req, res) {
 
     const map = new Map();
     for (const t of transfers) {
+      if (isSelfTransferForWallet(t)) continue;
       const amount = Number(t.amountNormalized || 0);
       const key = mode === 'wallet' ? t.wallet.address : t.tokenName;
       const prev = map.get(key) || { incoming: 0, outgoing: 0, walletTags: mode === 'wallet' ? t.wallet.tags.map((x) => x.tag) : undefined };
