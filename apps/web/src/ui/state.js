@@ -9,6 +9,6 @@ export function createInitialState() {
     summaryMode: 'token',
     filters: { start: '', end: '', direction: '', tokenContract: '', walletAddress: '', walletTag: '', includeSpam: false },
     balanceFilters: { tokenContract: '', walletTag: '' },
-    balanceSort: 'asc',
+    balanceSort: 'desc',
   };
 }
