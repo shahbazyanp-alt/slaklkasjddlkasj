@@ -61,6 +61,7 @@
       <section id="view-tags" class="view hidden"></section>
       <section id="view-settings" class="view hidden"></section>
       <section id="view-tests" class="view hidden"></section>
+      <section id="view-tests-2" class="view hidden"></section>
     </main>
   </div>
 
@@ -75,7 +76,7 @@ import { renderBalancesLedgerHtml, renderBalancesEtherscanHtml } from './ui/view
 
 const tabs = [
   ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
-  ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки'], ['tests','Тесты']
+  ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки'], ['tests','Тесты'], ['tests-2','Тесты 2']
 ];
 
 const state = createInitialState();
@@ -153,6 +154,9 @@ async function setTab(tab){
   }
   if (tab === 'tests') {
     renderTests();
+  }
+  if (tab === 'tests-2') {
+    renderTests2();
   }
 }
 
@@ -709,6 +713,72 @@ function renderTests(){
   `;
 }
 
+
+function renderTests2(){
+  document.getElementById('view-tests-2').innerHTML = `
+    <div class="card"><h2>Тесты 2</h2><div class="muted">Макет мультисетевого раздела «Кошельки» (Ethereum + Tron)</div></div>
+
+    <div class="card"><h3>Добавить бизнес-кошелёк</h3>
+      <div class="row">
+        <input placeholder="Номер кошелька (например, 36)" style="min-width:220px" />
+        <input placeholder="Label (опционально)" style="min-width:240px" />
+        <input placeholder="Теги через запятую" style="min-width:260px" />
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input placeholder="Ethereum address (0x...)" style="min-width:320px" />
+        <input placeholder="Tron address (T...)" style="min-width:320px" />
+        <button class="primary">Сохранить кошелёк</button>
+      </div>
+      <div class="note" style="margin-top:8px">Один номер кошелька может иметь адреса в нескольких сетях.</div>
+    </div>
+
+    <div class="card"><h3>Фильтры</h3>
+      <div class="row">
+        <select><option selected>Сеть: Все</option><option>Ethereum</option><option>Tron</option></select>
+        <input placeholder="Поиск по адресу/номеру/label" style="min-width:260px" />
+        <select><option selected>Тег: Все</option><option>нет</option><option>нет транз</option></select>
+        <button>Применить</button>
+      </div>
+    </div>
+
+    <div class="card"><h3>Список кошельков (мультисеть)</h3>
+      <table>
+        <thead><tr><th>№</th><th>Label</th><th>Ethereum</th><th>Tron</th><th>Теги</th><th>Действия</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>36</td>
+            <td>Main payments</td>
+            <td>0x50F5...d1FF</td>
+            <td>TQ9y...X2k1</td>
+            <td><span class="pill">vip</span> <span class="pill">active</span></td>
+            <td><button>Редактировать</button> <button>Отключить сеть</button></td>
+          </tr>
+          <tr>
+            <td>41</td>
+            <td>Reserve</td>
+            <td>0x01be...0405</td>
+            <td>—</td>
+            <td><span class="pill">нет транз</span></td>
+            <td><button>Добавить Tron-адрес</button> <button>Редактировать</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:8px">Рекомендуемо: хранить одну сущность «бизнес-кошелёк», внутри — адреса по сетям.</div>
+    </div>
+
+    <div class="card"><h3>Bulk import (мультисеть)</h3>
+      <div class="row">
+        <textarea style="min-width:520px;min-height:120px" placeholder="Формат:
+walletNumber,ethAddress,tronAddress,tags
+36,0x...,TQ...,vip;active"></textarea>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="primary">Импортировать</button>
+        <button>Скачать шаблон CSV</button>
+      </div>
+    </div>
+  `;
+}
 
 function renderSettings(){
   const isAdmin = state.me?.role === 'admin';
