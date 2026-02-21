@@ -1,7 +1,9 @@
 openapi: 3.0.3
 info:
   title: Crypto Tracker API
-  version: 0.1.0
+  version: 0.2.0
+servers:
+  - url: https://tracker-web-9d6e.onrender.com
 paths:
   /health:
     get:
@@ -9,9 +11,97 @@ paths:
       responses:
         '200':
           description: OK
+
   /api/wallets:
     get:
-      summary: List wallets
+      summary: Список кошельков
       responses:
-        '200':
-          description: Wallet list
+        '200': { description: OK }
+
+  /api/wallets/number:
+    put:
+      summary: Установить номер кошелька
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+                walletNumber: { type: string, nullable: true }
+      responses:
+        '200': { description: Updated }
+
+  /api/tags:
+    get:
+      summary: Список тегов
+      responses:
+        '200': { description: OK }
+
+  /api/tags/assign:
+    post:
+      summary: Назначить тег кошелькам
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tag, walletIds]
+              properties:
+                tag: { type: string }
+                walletIds:
+                  type: array
+                  items: { type: string }
+      responses:
+        '200': { description: Assigned }
+
+  /api/transfers:
+    get:
+      summary: Транзакции ledger (с фильтрами)
+      responses:
+        '200': { description: OK }
+
+  /api/summary:
+    get:
+      summary: Сводка по токенам/кошелькам
+      responses:
+        '200': { description: OK }
+
+  /api/balances:
+    get:
+      summary: Расчётный ledger баланс (in-out)
+      responses:
+        '200': { description: OK }
+
+  /api/balances/etherscan:
+    get:
+      summary: Текущие балансы из таблицы EtherscanTokenBalance
+      responses:
+        '200': { description: OK }
+
+  /api/balances/etherscan/sync:
+    post:
+      summary: Запуск sync балансов из Etherscan
+      responses:
+        '202': { description: Started }
+
+  /api/balances/etherscan/status:
+    get:
+      summary: Статус sync балансов
+      responses:
+        '200': { description: OK }
+
+  /api/sync/trigger:
+    post:
+      summary: Запуск sync транзакций
+      responses:
+        '202': { description: Started }
+
+  /api/sync/status:
+    get:
+      summary: Статус sync транзакций
+      responses:
+        '200': { description: OK }

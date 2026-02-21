@@ -1,14 +1,27 @@
-# Runbook: Deploy
+# Runbook: Deploy (Render)
 
-## Preconditions
-- Main branch green
-- Required env vars set in Render
+## Цель
+Безопасно выкатывать изменения в `tracker-web` / `tracker-worker`.
 
-## Steps
-1. Push to `main`.
-2. Verify Render auto-deploy started.
-3. Check health endpoint: `/health`.
-4. Smoke check key pages/API.
+## Перед деплоем
+- Изменения в `main`
+- Обновлена документация в `prod1/`
+- Проверен `npm`/миграции локально (по возможности)
 
-## Rollback
-- Render -> previous successful deploy -> Rollback.
+## Шаги
+1. Push в `main`.
+2. Render auto-deploy или Manual Deploy latest commit.
+3. Проверить события деплоя: статус `live`.
+4. Проверить `GET /health`.
+5. Smoke:
+   - логин
+   - `/api/wallets`
+   - `/api/summary`
+   - вкладка `Кошельки`/`Сводка`
+
+## Откат
+- Render → service → deploys → Rollback на предыдущий `live`.
+
+## Частые проблемы
+- Старая UI-версия: hard refresh.
+- Расхождение цифр: проверить, что смотришь правильный домен (`tracker-web-9d6e.onrender.com`).

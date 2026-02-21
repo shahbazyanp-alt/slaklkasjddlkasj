@@ -1,26 +1,35 @@
-# PRD — Crypto Tracker MVP
+# PRD — Crypto Tracker (Production)
 
-## Goal
-Track ERC-20 inflows/outflows across managed wallets with auditable summaries.
+## 1) Цель
+Надёжно учитывать ERC-20 вход/выход по пулу управляемых кошельков и давать корректную операционную отчётность (транзакции, сводка, балансы).
 
-## Users
-- Admin
-- Read-only analyst
+## 2) Пользователи и роли
+- **admin** — управляет кошельками/тегами/whitelist, запускает sync.
+- **read_only** — только просмотр.
 
-## Scope
-- Ethereum ERC-20
-- Wallet management
-- Transfers sync from Etherscan
-- Summary/ledger/balance views
+## 3) Scope (текущий)
+- Сеть: Ethereum
+- Активы: ERC-20
+- Источник: Etherscan API
+- Данные:
+  - ledger транзакций (`Erc20Transfer`)
+  - текущие балансы Etherscan (`EtherscanTokenBalance`)
+- UI: Обзор, Кошельки, Транзакции, Сводка, balanceLedger, balanceEtherscan, Теги, Настройки.
 
-## Out of scope
-- Multi-chain
-- On-chain write actions
+## 4) Критичные бизнес-правила
+1. Self-transfer (`from == to == wallet`) не должен влиять на отчёты.
+2. `summary` строится по ledger (`Erc20Transfer`), не по live-запросу в Etherscan.
+3. `balanceEtherscan` хранится в БД (не в RAM), чтобы не теряться при рестарте.
+4. Любое изменение в расчётах должно сопровождаться обновлением runbook/ADR.
 
-## Success metrics
-- Sync success rate
-- Data freshness
-- Summary correctness
+## 5) Нефункциональные требования
+- Корректность: сводка консистентна с ledger.
+- Наблюдаемость: видимый статус sync + логи.
+- Восстановление: rollback на предыдущий deploy в Render.
+- Безопасность: роли + валидация входных данных.
 
-## Open questions
-- TBD
+## 6) Definition of Done
+- Код + smoke-check
+- Обновлены docs в `prod1/`
+- Обновлён changelog
+- Подтверждён healthcheck и базовые проверки UI/API в проде
