@@ -79,15 +79,6 @@ const tabs = [
 
 const state = createInitialState();
 
-async function pollSyncStatus(onTick) {
-  while (true) {
-    const status = await api('/api/sync/status');
-    onTick(status);
-    if (!status.running) return status;
-    await new Promise(r => setTimeout(r, 1200));
-  }
-}
-
 function renderSyncLogs(logEl, logs = []) {
   if (!logEl) return;
   const rows = logs.slice(-80).map((l) => {
@@ -97,33 +88,6 @@ function renderSyncLogs(logEl, logs = []) {
   });
   logEl.innerHTML = rows.join('') || '<div class="muted">Лог пуст</div>';
   logEl.scrollTop = logEl.scrollHeight;
-}
-
-function applySyncStatusToUi(status, noteEl, fillEl, logEl) {
-  fillEl.style.width = `${status.progress || 0}%`;
-  noteEl.textContent = status.running
-    ? `Синк: ${status.processedWallets}/${status.totalWallets} кошельков, +${status.inserted} записей`
-    : (status.error
-      ? `Ошибка: ${status.error}`
-      : `Готово: ${status.processedWallets}/${status.totalWallets}, +${status.inserted}`);
-  renderSyncLogs(logEl, status.logs || []);
-}
-
-async function hydrateSyncUi(noteEl, fillEl, logEl) {
-  try {
-    const status = await api('/api/sync/status');
-    applySyncStatusToUi(status, noteEl, fillEl, logEl);
-  } catch {
-    // no-op
-  }
-}
-
-async function startSyncWithProgress(noteEl, fillEl, logEl) {
-  await api('/api/sync/trigger', { method: 'POST' });
-  const finalStatus = await pollSyncStatus((status) => {
-    applySyncStatusToUi(status, noteEl, fillEl, logEl);
-  });
-  return finalStatus;
 }
 
 async function setTab(tab){
@@ -187,23 +151,6 @@ function renderOverview(){
     usdcBalance,
   });
 
-  const note = document.getElementById('sync-note');
-  const fill = document.getElementById('sync-progress-fill');
-  const log = document.getElementById('sync-log');
-  hydrateSyncUi(note, fill, log);
-
-  document.getElementById('manual-sync').onclick = async () => {
-    note.textContent = 'Запуск...';
-    try {
-      await startSyncWithProgress(note, fill, log);
-      await refreshAll();
-      renderOverview();
-      renderTransfers();
-      await loadSummary();
-    } catch (e) {
-      note.textContent = 'Ошибка: ' + e.message;
-    }
-  };
 }
 
 function renderWallets(){
@@ -355,11 +302,7 @@ function renderTransfers(){
       ${walletOptionsDatalist('wallet-options-transfers')}
       <button id="t-apply">Применить</button>
       <button id="t-refresh">Обновить</button>
-      <button id="t-sync" class="primary">Искать в Etherscan</button>
-      <div class="progress-wrap"><div class="progress-bar"><div id="t-sync-fill" class="progress-fill"></div></div></div>
-      <span id="t-sync-note" class="note"></span>
     </div>
-    <div style="margin-top:10px" class="sync-log" id="t-sync-log"></div>
     </div>
     <div class="card"><table>
       <thead><tr><th>Дата</th><th>Кошелёк</th><th>Токен</th><th>Напр.</th><th>Приход</th><th>Расход</th><th>TX</th></tr></thead>
@@ -395,23 +338,6 @@ function renderTransfers(){
     await loadTransfers();
   };
   document.getElementById('t-refresh').onclick = async () => { await refreshAll(); await loadTransfers(); };
-  const note = document.getElementById('t-sync-note');
-  const fill = document.getElementById('t-sync-fill');
-  const log = document.getElementById('t-sync-log');
-  hydrateSyncUi(note, fill, log);
-
-  document.getElementById('t-sync').onclick = async () => {
-    note.textContent = 'Запуск...';
-    try {
-      await startSyncWithProgress(note, fill, log);
-      await refreshAll();
-      await loadTransfers();
-      renderOverview();
-      await loadSummary();
-    } catch (e) {
-      note.textContent = 'Ошибка: ' + e.message;
-    }
-  };
 }
 
 async function loadSummary() {
