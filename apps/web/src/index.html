@@ -187,23 +187,6 @@ function renderOverview(){
     usdcBalance,
   });
 
-  const note = document.getElementById('sync-note');
-  const fill = document.getElementById('sync-progress-fill');
-  const log = document.getElementById('sync-log');
-  hydrateSyncUi(note, fill, log);
-
-  document.getElementById('manual-sync').onclick = async () => {
-    note.textContent = 'Запуск...';
-    try {
-      await startSyncWithProgress(note, fill, log);
-      await refreshAll();
-      renderOverview();
-      renderTransfers();
-      await loadSummary();
-    } catch (e) {
-      note.textContent = 'Ошибка: ' + e.message;
-    }
-  };
 }
 
 function renderWallets(){
