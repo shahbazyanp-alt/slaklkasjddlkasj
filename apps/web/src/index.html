@@ -62,6 +62,7 @@
       <section id="view-settings" class="view hidden"></section>
       <section id="view-tests" class="view hidden"></section>
       <section id="view-tests-2" class="view hidden"></section>
+      <section id="view-tests-3" class="view hidden"></section>
     </main>
   </div>
 
@@ -76,7 +77,7 @@ import { renderBalancesLedgerHtml, renderBalancesEtherscanHtml } from './ui/view
 
 const tabs = [
   ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
-  ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки'], ['tests','Тесты'], ['tests-2','Тесты 2']
+  ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки'], ['tests','Тесты'], ['tests-2','Тесты 2'], ['tests-3','Тесты 3']
 ];
 
 const state = createInitialState();
@@ -157,6 +158,9 @@ async function setTab(tab){
   }
   if (tab === 'tests-2') {
     renderTests2();
+  }
+  if (tab === 'tests-3') {
+    renderTests3();
   }
 }
 
@@ -762,6 +766,53 @@ function renderTests2(){
   `;
 }
 
+
+function renderTests3(){
+  document.getElementById('view-tests-3').innerHTML = `
+    <div class="card"><h2>Тесты 3</h2><div class="muted">Макет мультисетевого раздела «Whitelist» (ERC20 / TRC20)</div></div>
+
+    <div class="card"><h3>Сеть whitelist</h3>
+      <div class="row">
+        <button class="primary">Whitelist ERC20</button>
+        <button>Whitelist TRC20</button>
+        <span class="note">Тумблер переключает список токенов и форму добавления по сети.</span>
+      </div>
+    </div>
+
+    <div class="card"><h3>Добавить токен в whitelist (выбранная сеть)</h3>
+      <div class="row">
+        <input placeholder="Token symbol (например, USDT)" style="min-width:180px" />
+        <input placeholder="Token name" style="min-width:220px" />
+        <input placeholder="Contract address (0x... или T...)" style="min-width:340px" />
+        <input placeholder="Decimals" style="min-width:120px" />
+        <button class="primary">Добавить</button>
+      </div>
+      <div class="note" style="margin-top:8px">В ERC20 валидируем 0x-контракт, в TRC20 — Tron-формат.</div>
+    </div>
+
+    <div class="card"><h3>Whitelist токены (только выбранная сеть)</h3>
+      <table>
+        <thead><tr><th>Symbol</th><th>Name</th><th>Contract</th><th>Decimals</th><th>Действия</th></tr></thead>
+        <tbody>
+          <tr><td>USDT</td><td>Tether USD</td><td>0xdAC17F...ec7</td><td>6</td><td><button>Редактировать</button> <button>Удалить</button></td></tr>
+          <tr><td>USDC</td><td>USD Coin</td><td>0xA0b869...eB48</td><td>6</td><td><button>Редактировать</button> <button>Удалить</button></td></tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:8px">При переключении на TRC20 показываются TRC-токены, например USDT (TRC20).</div>
+    </div>
+
+    <div class="card"><h3>Bulk import whitelist</h3>
+      <div class="row">
+        <textarea style="min-width:520px;min-height:110px" placeholder="symbol,name,contract,decimals
+USDT,Tether USD,0xdAC17...,6"></textarea>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="primary">Импортировать</button>
+        <button>Скачать шаблон CSV</button>
+      </div>
+    </div>
+  `;
+}
 
 function renderSettings(){
   const isAdmin = state.me?.role === 'admin';
