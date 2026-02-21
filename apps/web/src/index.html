@@ -641,53 +641,78 @@ function renderTagsAdmin(){
 
 function renderTests(){
   document.getElementById('view-tests').innerHTML = `
-    <div class="card"><h2>Тесты</h2><div class="muted">Макет страницы: Менеджмент ролей доступа (front-only)</div></div>
+    <div class="card"><h2>Тесты</h2><div class="muted">UX-макет: мультисеть Ethereum (ERC-20) + Tron (TRC-20)</div></div>
 
-    <div class="card"><h3>Роли доступа</h3>
-      <ul>
-        <li><b>admin</b> — полный доступ</li>
-        <li><b>read_only</b> — только просмотр</li>
-      </ul>
-    </div>
-
-    <div class="card"><h3>Выдать доступ</h3>
+    <div class="card"><h3>Режим просмотра</h3>
       <div class="row">
-        <input placeholder="Email" style="min-width:320px" value="" />
-        <select><option>admin</option><option>read_only</option></select>
-        <button class="primary">Выдать доступ</button>
+        <button class="primary">Все сети</button>
+        <button>Только Ethereum</button>
+        <button>Только Tron</button>
+        <span class="note">По умолчанию: Все сети (агрегировано)</span>
       </div>
-      <div class="note" style="margin-top:8px">Если пользователь уже есть — роль будет обновлена.</div>
     </div>
 
-    <div class="card"><h3>Пользователи и роли</h3>
+    <div class="card"><h3>Фильтры</h3>
+      <div class="row">
+        <select>
+          <option selected>Сеть: Все</option>
+          <option>Ethereum (ERC-20)</option>
+          <option>Tron (TRC-20)</option>
+        </select>
+        <select>
+          <option selected>Токен: Все</option>
+          <option>USDT</option>
+          <option>USDC</option>
+        </select>
+        <select>
+          <option selected>Источник: Все</option>
+          <option>Etherscan</option>
+          <option>Tronscan</option>
+        </select>
+        <button>Применить</button>
+      </div>
+    </div>
+
+    <div class="card"><h3>KPI (агрегировано)</h3>
+      <div class="grid2">
+        <div class="card"><div class="muted">USDT общий</div><div class="kpi">72 844,18</div><div class="note">ERC: 16 166,96 • TRC: 56 677,22</div></div>
+        <div class="card"><div class="muted">USDC общий</div><div class="kpi">0</div><div class="note">ERC: 0 • TRC: 0</div></div>
+      </div>
+    </div>
+
+    <div class="card"><h3>Сводка по сетям</h3>
       <table>
-        <thead><tr><th>Email</th><th>Роль</th><th>Статус</th><th>Изменено</th><th>Действия</th></tr></thead>
+        <thead><tr><th>Сеть</th><th>Вход</th><th>Выход</th><th>Итого</th><th>Последнее обновление</th></tr></thead>
         <tbody>
-          <tr>
-            <td>prepregardo@gmail.com</td>
-            <td><select><option selected>admin</option><option>read_only</option></select></td>
-            <td>active</td>
-            <td>21.02 14:20</td>
-            <td><button>Сохранить</button> <button>Отключить</button></td>
-          </tr>
-          <tr>
-            <td>analyst@company.com</td>
-            <td><select><option>admin</option><option selected>read_only</option></select></td>
-            <td>active</td>
-            <td>20.02 18:03</td>
-            <td><button>Сохранить</button> <button>Отключить</button></td>
-          </tr>
+          <tr><td>Ethereum (ERC-20)</td><td class="in">8 441 281,79</td><td class="out">8 425 114,83</td><td class="in">16 166,96</td><td>21.02 15:02</td></tr>
+          <tr><td>Tron (TRC-20)</td><td class="in">5 210 490,00</td><td class="out">5 153 812,78</td><td class="in">56 677,22</td><td>21.02 15:01</td></tr>
+          <tr><td><b>Итого</b></td><td><b>13 651 771,79</b></td><td><b>13 578 927,61</b></td><td><b>72 844,18</b></td><td>—</td></tr>
         </tbody>
       </table>
-      <div class="note" style="margin-top:8px">⚠ Нельзя снять роль у последнего admin.</div>
     </div>
 
-    <div class="card"><h3>История изменений (последние 20)</h3>
-      <div class="note">21.02 14:20 — you@company.com изменил analyst@company.com: read_only → admin</div>
-      <div class="note">20.02 18:03 — you@company.com выдал доступ analyst@company.com</div>
+    <div class="card"><h3>Единая таблица кошельков</h3>
+      <table>
+        <thead><tr><th>№</th><th>Кошелёк</th><th>Сеть</th><th>USDT</th><th>USDC</th><th>Источник</th></tr></thead>
+        <tbody>
+          <tr><td>36</td><td>0x50F5...d1FF</td><td>Ethereum</td><td>16 166,96</td><td>0</td><td>Etherscan</td></tr>
+          <tr><td>36</td><td>TQ9y...X2k1</td><td>Tron</td><td>56 677,22</td><td>0</td><td>Tronscan</td></tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:8px">Один бизнес-кошелёк может иметь адреса в обеих сетях, объединяется по номеру кошелька.</div>
+    </div>
+
+    <div class="card"><h3>Синхронизация</h3>
+      <div class="row">
+        <button>Обновить ERC (Etherscan)</button>
+        <button>Обновить TRC (Tronscan)</button>
+        <button class="primary">Обновить всё</button>
+      </div>
+      <div class="note" style="margin-top:8px">Независимые статусы: ERC sync и TRC sync, чтобы видеть где проблема.</div>
     </div>
   `;
 }
+
 
 function renderSettings(){
   const isAdmin = state.me?.role === 'admin';
