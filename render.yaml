@@ -70,5 +70,3 @@ services:
         sync: false
       - key: ETHERSCAN_RPS
         value: "5"
-      - key: SYNC_INTERVAL_MS
-        value: "60000"

@@ -58,7 +58,7 @@ async function runSyncTick() {
 }
 
 async function main() {
-  console.log('[worker] started in manual-only mode (auto refresh disabled)');
+  console.log('[worker] started in manual-only mode (no automatic sync)');
   // Keep worker process alive, but do not run automatic sync ticks.
   setInterval(() => {
     // noop heartbeat
