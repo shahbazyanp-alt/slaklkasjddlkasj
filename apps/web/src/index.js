@@ -346,6 +346,42 @@ function requireApiAuth(req, res) {
   return user;
 }
 
+function parseUserRole(value) {
+  const role = String(value || '').trim();
+  if (role !== 'admin' && role !== 'read_only') throw badRequest('role must be admin or read_only');
+  return role;
+}
+
+async function ensureAdminOrThrow(authUser) {
+  const me = await prisma.user.findUnique({ where: { id: authUser.uid }, select: { id: true, role: true } });
+  if (!me || me.role !== 'admin') {
+    const err = new Error('Forbidden: admin only');
+    err.status = 403;
+    throw err;
+  }
+  return me;
+}
+
+async function ensureNotLastAdminRemoval(targetUserId, nextRole) {
+  const target = await prisma.user.findUnique({ where: { id: targetUserId }, select: { id: true, role: true } });
+  if (!target) {
+    const err = new Error('User not found');
+    err.status = 404;
+    throw err;
+  }
+
+  const willLoseAdmin = target.role === 'admin' && nextRole !== 'admin';
+  if (!willLoseAdmin) return target;
+
+  const adminCount = await prisma.user.count({ where: { role: 'admin' } });
+  if (adminCount <= 1) {
+    const err = new Error('Cannot remove role from the last admin');
+    err.status = 409;
+    throw err;
+  }
+  return target;
+}
+
 async function handleGoogleAuthStart(req, res) {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !SESSION_SECRET) {
     res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -440,17 +476,18 @@ async function handleGoogleAuthCallback(req, res) {
     }
 
     const normalizedEmail = String(profile.email).toLowerCase();
-    const grantedRole = ADMIN_EMAILS.has(normalizedEmail) ? 'admin' : 'read_only';
 
-    const user = await prisma.user.upsert({
-      where: { email: normalizedEmail },
-      update: { role: grantedRole },
-      create: {
-        email: normalizedEmail,
-        passwordHash: 'oauth_google',
-        role: grantedRole,
-      },
-    });
+    let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (!user) {
+      const grantedRole = ADMIN_EMAILS.has(normalizedEmail) ? 'admin' : 'read_only';
+      user = await prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          passwordHash: 'oauth_google',
+          role: grantedRole,
+        },
+      });
+    }
 
     setSessionCookie(req, res, { uid: user.id, email: user.email, role: user.role });
     res.writeHead(302, { Location: '/' });
@@ -474,6 +511,84 @@ async function handleApi(req, res) {
   }
 
   const authUser = requireApiAuth(req, res);
+  if (!authUser) return true;
+
+  if (req.method === 'GET' && url.pathname === '/api/access/users') {
+    await ensureAdminOrThrow(authUser);
+    const users = await prisma.user.findMany({
+      orderBy: [{ role: 'asc' }, { updatedAt: 'desc' }],
+      select: { id: true, email: true, role: true, createdAt: true, updatedAt: true },
+    });
+    return sendJson(res, 200, users.map((u) => ({ ...u, status: 'active' })));
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/access/users') {
+    await ensureAdminOrThrow(authUser);
+    const body = await readJsonBody(req);
+    const email = requireString(body.email, 'email').toLowerCase();
+    const role = parseUserRole(body.role);
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      await ensureNotLastAdminRemoval(existing.id, role);
+    }
+
+    const user = await prisma.user.upsert({
+      where: { email },
+      update: { role },
+      create: { email, role, passwordHash: 'oauth_google' },
+      select: { id: true, email: true, role: true, createdAt: true, updatedAt: true },
+    });
+    return sendJson(res, 200, { ...user, status: 'active' });
+  }
+
+  if (req.method === 'PUT' && url.pathname === '/api/access/users/role') {
+    await ensureAdminOrThrow(authUser);
+    const body = await readJsonBody(req);
+    const id = requireString(body.id, 'id');
+    const role = parseUserRole(body.role);
+
+    await ensureNotLastAdminRemoval(id, role);
+
+    const user = await prisma.user.update({
+      where: { id },
+      data: { role },
+      select: { id: true, email: true, role: true, createdAt: true, updatedAt: true },
+    });
+
+    return sendJson(res, 200, { ...user, status: 'active' });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/access/users/disable') {
+    await ensureAdminOrThrow(authUser);
+    const body = await readJsonBody(req);
+    const id = requireString(body.id, 'id');
+
+    if (id === authUser.uid) {
+      const err = new Error('You cannot disable your own account');
+      err.status = 409;
+      throw err;
+    }
+
+    await ensureNotLastAdminRemoval(id, 'read_only');
+    await prisma.user.delete({ where: { id } });
+    return sendJson(res, 200, { ok: true });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/access/audit') {
+    await ensureAdminOrThrow(authUser);
+    const users = await prisma.user.findMany({
+      orderBy: { updatedAt: 'desc' },
+      take: 20,
+      select: { email: true, role: true, updatedAt: true },
+    });
+    const events = users.map((u) => ({
+      ts: u.updatedAt,
+      message: `Роль ${u.email}: ${u.role}`,
+    }));
+    return sendJson(res, 200, events);
+  }
+
   if (!authUser) return true;
   const isReadOnly = authUser.role === 'read_only';
   const isWriteMethod = req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS';
@@ -857,8 +972,8 @@ http
       });
       res.end(html);
     } catch (error) {
-      if (error?.status === 400) {
-        return sendJson(res, 400, { error: String(error?.message || error), details: error?.details });
+      if (error?.status && Number.isInteger(error.status) && error.status >= 400 && error.status < 500) {
+        return sendJson(res, error.status, { error: String(error?.message || error), details: error?.details });
       }
       console.error(error);
       sendJson(res, 500, { error: String(error?.message || error) });

@@ -147,6 +147,10 @@ async function setTab(tab){
   if (tab === 'tags') {
     renderTagsAdmin();
   }
+  if (tab === 'settings') {
+    await loadAccessData();
+    renderSettings();
+  }
   if (tab === 'tests') {
     renderTests();
   }
@@ -686,10 +690,126 @@ function renderTests(){
 }
 
 function renderSettings(){
+  const isAdmin = state.me?.role === 'admin';
+
+  if (!isAdmin) {
+    document.getElementById('view-settings').innerHTML = `
+      <div class="card"><h2>Настройки</h2><div class="muted">Параметры доступа</div></div>
+      <div class="card"><h3>Роли доступа</h3><ul><li><b>admin</b> — полный доступ</li><li><b>read_only</b> — только просмотр</li></ul></div>
+      <div class="card"><div class="note">У тебя нет прав администратора для управления доступом.</div></div>`;
+    return;
+  }
+
+  const rows = state.accessUsers.map((u) => `
+    <tr>
+      <td>${u.email}</td>
+      <td>
+        <select data-access-role-id="${u.id}">
+          <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option>
+          <option value="read_only" ${u.role === 'read_only' ? 'selected' : ''}>read_only</option>
+        </select>
+      </td>
+      <td>active</td>
+      <td>${new Date(u.updatedAt).toLocaleString('ru-RU')}</td>
+      <td>
+        <button data-access-save="${u.id}">Сохранить</button>
+        <button data-access-disable="${u.id}">Отключить</button>
+      </td>
+    </tr>
+  `).join('');
+
+  const auditRows = (state.accessAudit || []).map((a) => `<div class="note">${new Date(a.ts).toLocaleString('ru-RU')} — ${a.message}</div>`).join('') || '<div class="note">История пока пустая</div>';
+
   document.getElementById('view-settings').innerHTML = `
     <div class="card"><h2>Настройки</h2><div class="muted">Параметры доступа</div></div>
-    <div class="card"><h3>Роли доступа</h3><ul><li><b>admin</b> — полный доступ</li><li><b>read_only</b> — только просмотр</li></ul></div>`;
+
+    <div class="card"><h3>Роли доступа</h3>
+      <ul>
+        <li><b>admin</b> — полный доступ</li>
+        <li><b>read_only</b> — только просмотр</li>
+      </ul>
+    </div>
+
+    <div class="card"><h3>Выдать доступ</h3>
+      <div class="row">
+        <input id="access-email" placeholder="Email" style="min-width:320px" />
+        <select id="access-role"><option>admin</option><option>read_only</option></select>
+        <button id="access-grant" class="primary">Выдать доступ</button>
+        <span id="access-note" class="note"></span>
+      </div>
+      <div class="note" style="margin-top:8px">Если пользователь уже есть — роль будет обновлена.</div>
+    </div>
+
+    <div class="card"><h3>Пользователи и роли</h3>
+      <table>
+        <thead><tr><th>Email</th><th>Роль</th><th>Статус</th><th>Изменено</th><th>Действия</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="note" style="margin-top:8px">⚠ Нельзя снять роль у последнего admin.</div>
+    </div>
+
+    <div class="card"><h3>История изменений (последние 20)</h3>
+      ${auditRows}
+    </div>
+  `;
+
+  const note = document.getElementById('access-note');
+  document.getElementById('access-grant').onclick = async () => {
+    const email = String(document.getElementById('access-email').value || '').trim().toLowerCase();
+    const role = document.getElementById('access-role').value;
+    if (!email) {
+      note.textContent = 'Укажи email';
+      return;
+    }
+    try {
+      await api('/api/access/users', { method: 'POST', body: JSON.stringify({ email, role }) });
+      note.textContent = 'Готово';
+      await loadAccessData();
+      renderSettings();
+    } catch (e) {
+      note.textContent = 'Ошибка: ' + e.message;
+    }
+  };
+
+  document.querySelectorAll('[data-access-save]').forEach((btn) => {
+    btn.onclick = async () => {
+      const id = btn.dataset.accessSave;
+      const roleEl = document.querySelector(`[data-access-role-id="${id}"]`);
+      try {
+        await api('/api/access/users/role', { method: 'PUT', body: JSON.stringify({ id, role: roleEl.value }) });
+        await loadAccessData();
+        renderSettings();
+      } catch (e) {
+        note.textContent = 'Ошибка: ' + e.message;
+      }
+    };
+  });
+
+  document.querySelectorAll('[data-access-disable]').forEach((btn) => {
+    btn.onclick = async () => {
+      const id = btn.dataset.accessDisable;
+      if (!confirm('Отключить доступ этому пользователю?')) return;
+      try {
+        await api('/api/access/users/disable', { method: 'POST', body: JSON.stringify({ id }) });
+        await loadAccessData();
+        renderSettings();
+      } catch (e) {
+        note.textContent = 'Ошибка: ' + e.message;
+      }
+    };
+  });
 }
+
+async function loadAccessData() {
+  try {
+    state.accessUsers = await api('/api/access/users');
+    state.accessAudit = await api('/api/access/audit');
+  } catch (e) {
+    state.accessUsers = [];
+    state.accessAudit = [{ ts: new Date().toISOString(), message: `Недоступно: ${e.message}` }];
+  }
+}
+
 
 async function refreshAll() {
   state.wallets = await api('/api/wallets');
@@ -708,7 +828,12 @@ async function refreshAll() {
   renderWhitelist();
   renderTransfers();
   await loadSummary();
-  renderSettings();
+  try {
+    const meRes = await api('/api/auth/me');
+    state.me = meRes.user || null;
+  } catch {
+    state.me = null;
+  }
   await setTab('overview');
 })();
 </script>
