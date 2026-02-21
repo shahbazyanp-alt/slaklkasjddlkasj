@@ -60,6 +60,7 @@
       <section id="view-balances-etherscan" class="view hidden"></section>
       <section id="view-tags" class="view hidden"></section>
       <section id="view-settings" class="view hidden"></section>
+      <section id="view-tests" class="view hidden"></section>
     </main>
   </div>
 
@@ -74,7 +75,7 @@ import { renderBalancesLedgerHtml, renderBalancesEtherscanHtml } from './ui/view
 
 const tabs = [
   ['overview','Обзор'], ['wallets','Кошельки'], ['whitelist','Whitelist'],
-  ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки']
+  ['transfers','Транзакции'], ['summary','Сводка'], ['balances-ledger','balanceLedger'], ['balances-etherscan','balanceEtherscan'], ['tags','Теги'], ['settings','Настройки'], ['tests','Тесты']
 ];
 
 const state = createInitialState();
@@ -145,6 +146,9 @@ async function setTab(tab){
   }
   if (tab === 'tags') {
     renderTagsAdmin();
+  }
+  if (tab === 'tests') {
+    renderTests();
   }
 }
 
@@ -629,6 +633,56 @@ function renderTagsAdmin(){
       note.textContent = 'Ошибка: ' + e.message;
     }
   };
+}
+
+function renderTests(){
+  document.getElementById('view-tests').innerHTML = `
+    <div class="card"><h2>Тесты</h2><div class="muted">Макет страницы: Менеджмент ролей доступа (front-only)</div></div>
+
+    <div class="card"><h3>Роли доступа</h3>
+      <ul>
+        <li><b>admin</b> — полный доступ</li>
+        <li><b>read_only</b> — только просмотр</li>
+      </ul>
+    </div>
+
+    <div class="card"><h3>Выдать доступ</h3>
+      <div class="row">
+        <input placeholder="Email" style="min-width:320px" value="" />
+        <select><option>admin</option><option>read_only</option></select>
+        <button class="primary">Выдать доступ</button>
+      </div>
+      <div class="note" style="margin-top:8px">Если пользователь уже есть — роль будет обновлена.</div>
+    </div>
+
+    <div class="card"><h3>Пользователи и роли</h3>
+      <table>
+        <thead><tr><th>Email</th><th>Роль</th><th>Статус</th><th>Изменено</th><th>Действия</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>prepregardo@gmail.com</td>
+            <td><select><option selected>admin</option><option>read_only</option></select></td>
+            <td>active</td>
+            <td>21.02 14:20</td>
+            <td><button>Сохранить</button> <button>Отключить</button></td>
+          </tr>
+          <tr>
+            <td>analyst@company.com</td>
+            <td><select><option>admin</option><option selected>read_only</option></select></td>
+            <td>active</td>
+            <td>20.02 18:03</td>
+            <td><button>Сохранить</button> <button>Отключить</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note" style="margin-top:8px">⚠ Нельзя снять роль у последнего admin.</div>
+    </div>
+
+    <div class="card"><h3>История изменений (последние 20)</h3>
+      <div class="note">21.02 14:20 — you@company.com изменил analyst@company.com: read_only → admin</div>
+      <div class="note">20.02 18:03 — you@company.com выдал доступ analyst@company.com</div>
+    </div>
+  `;
 }
 
 function renderSettings(){
